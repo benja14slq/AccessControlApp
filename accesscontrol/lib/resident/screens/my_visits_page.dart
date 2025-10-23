@@ -1,6 +1,6 @@
-import 'package:accesscontrol/state/resident_state.dart';
-import 'package:accesscontrol/utils/format.dart';
-import 'package:accesscontrol/widgets/status_chip.dart';
+import 'package:accesscontrol/resident/state/resident_state.dart';
+import 'package:accesscontrol/shared/widgets/status_chip.dart';
+import 'package:accesscontrol/shared/utils.dart';
 import 'package:flutter/material.dart';
 
 class MyVisitsPage extends StatelessWidget {

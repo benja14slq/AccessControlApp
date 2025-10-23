@@ -1,8 +1,9 @@
+import 'package:accesscontrol/resident/state/resident_state.dart';
+import 'package:accesscontrol/shared/widgets/stat_card.dart';
+import 'package:accesscontrol/shared/widgets/status_chip.dart';
+import 'package:accesscontrol/shared/utils.dart';
 import 'package:flutter/material.dart';
-import '../state/resident_state.dart';
-import '../utils/format.dart';
-import '../widgets/stat_card.dart';
-import '../widgets/status_chip.dart';
+import 'package:accesscontrol/shared/models.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key, required this.state, required this.goToCreate, required this.goToVisits});

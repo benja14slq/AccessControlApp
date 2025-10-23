@@ -1,43 +1,12 @@
-import 'dart:math';
+import 'package:accesscontrol/shared/models.dart';
 import 'package:flutter/material.dart';
-
-enum VisitStatus { programada, autorizada, rechazada, expirada }
-
-class VisitPass {
-  VisitPass({
-    required this.id,
-    required this.code,
-    required this.visitorName,
-    this.visitorId,
-    this.phone,
-    this.plate,
-    required this.scheduledAt,
-    required this.hostResident,
-    this.status = VisitStatus.programada,
-  });
-  final String id;
-  final String code;
-  final String visitorName;
-  final String? visitorId;
-  final String? phone;
-  final String? plate;
-  final DateTime scheduledAt;
-  final String hostResident;
-  VisitStatus status;
-}
-
-class Vehicle {
-  Vehicle({required this.plate, this.alias});
-  final String plate;
-  final String? alias;
-}
 
 class ResidentState extends ChangeNotifier {
   ResidentState() {
     visits.addAll([
       VisitPass(
-        id: _mkId(),
-        code: _mkCode(),
+        id: mkId(),
+        code: mkCode(),
         visitorName: 'Carolina Pérez',
         visitorId: '21.234.567-8',
         phone: '+56 9 8123 4567',
@@ -46,8 +15,8 @@ class ResidentState extends ChangeNotifier {
         hostResident: residentEmail,
       ),
       VisitPass(
-        id: _mkId(),
-        code: _mkCode(),
+        id: mkId(),
+        code: mkCode(),
         visitorName: 'Jorge Silva',
         visitorId: '18.345.678-9',
         phone: '+56 9 7777 0000',
@@ -82,8 +51,8 @@ class ResidentState extends ChangeNotifier {
     required DateTime scheduledAt,
   }) {
     final pass = VisitPass(
-      id: _mkId(),
-      code: _mkCode(),
+      id: mkId(),
+      code: mkCode(),
       visitorName: visitorName,
       visitorId: visitorId,
       phone: phone,
@@ -98,6 +67,3 @@ class ResidentState extends ChangeNotifier {
   void setNotifEmail(bool v) { notifEmail = v; notifyListeners(); }
   void setNotifPush(bool v) { notifPush = v; notifyListeners(); }
 }
-
-String _mkId() => Random().nextInt(0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase();
-String _mkCode() => 'PASS-${Random().nextInt(0xFFFF).toRadixString(16).padLeft(4, '0').toUpperCase()}';

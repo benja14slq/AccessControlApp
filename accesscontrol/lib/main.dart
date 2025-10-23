@@ -1,72 +1,101 @@
-import 'package:accesscontrol/screens/create_pass_page.dart';
-import 'package:accesscontrol/screens/my_visits_page.dart';
-import 'package:accesscontrol/screens/settings_page.dart';
-import 'package:accesscontrol/screens/vehicles_page.dart';
+// lib/main.dart
+
+import 'package:accesscontrol/admin/admin_shell.dart';
+import 'package:accesscontrol/guard/guard_shell.dart';
+import 'package:accesscontrol/resident/resident_shell.dart';
+import 'package:accesscontrol/state/app_state.dart';
+import 'package:accesscontrol/visit/screens/visit_pass_page.dart';
 import 'package:flutter/material.dart';
-import 'state/resident_state.dart';
-import 'screens/home_page.dart';
+
+// 1. Inicializamos el estado global
+final AppState globalState = AppState();
 
 void main() {
-  runApp(const ResidentApp());
+  runApp(const RoleSelectorApp());
 }
 
-class ResidentApp extends StatelessWidget {
-  const ResidentApp({super.key});
+// 2. RoleSelectorApp AHORA SÓLO CONSTRUYE EL MATERIAL APP
+class RoleSelectorApp extends StatelessWidget {
+  const RoleSelectorApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Condominio — Residente',
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: Colors.indigo,
         brightness: Brightness.light,
       ),
-      home: const ResidentShell(),
+      // 3. Apuntamos a un NUEVO WIDGET para la página principal
+      home: const RoleSelectorHomePage(),
     );
   }
 }
 
-class ResidentShell extends StatefulWidget {
-  const ResidentShell({super.key});
-  @override
-  State<ResidentShell> createState() => _ResidentShellState();
-}
 
-class _ResidentShellState extends State<ResidentShell> {
-  final ResidentState state = ResidentState();
-  int index = 0; // 0: Home, 1: Crear, 2: Visitas, 3: Vehículos, 4: Cuenta
+// 4. ESTE ES EL NUEVO WIDGET QUE CONTIENE TU SCĂFFOLD
+class RoleSelectorHomePage extends StatelessWidget {
+  const RoleSelectorHomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      HomePage(
-        state: state,
-        goToCreate: () => setState(() => index = 1),
-        goToVisits: () => setState(() => index = 2),
-      ),
-      CreatePassPage(state: state, onCreated: () => setState(() => index = 2)),
-      MyVisitsPage(state: state),
-      VehiclesPage(state: state),
-      SettingsPage(state: state),
-    ];
-
+    // ESTE 'context' SÍ ESTÁ DEBAJO DEL MATERIAL APP Y ENCONTRARÁ EL NAVIGATOR
     return Scaffold(
-      appBar: AppBar(title: const Text('Mi Condominio — Residente')),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 200),
-        child: pages[index],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
-        onDestinationSelected: (i) => setState(() => index = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Inicio'),
-          NavigationDestination(icon: Icon(Icons.qr_code_2_outlined), selectedIcon: Icon(Icons.qr_code_2), label: 'Generar'),
-          NavigationDestination(icon: Icon(Icons.list_alt_outlined), selectedIcon: Icon(Icons.list_alt), label: 'Visitas'),
-          NavigationDestination(icon: Icon(Icons.directions_car_outlined), selectedIcon: Icon(Icons.directions_car), label: 'Vehículos'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Cuenta'),
+      appBar: AppBar(title: const Text('Seleccionar Prototipo de Rol')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Botón para lanzar la App de Residente
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.person_outline, color: Colors.indigo),
+              title: const Text('Rol: Residente'),
+              subtitle: const Text('Ver mi cuenta, generar pases, ver vehículos.'),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => ResidentShell(residentState: globalState.residentState),
+              )),
+            ),
+          ),
+          const SizedBox(height: 8),
+          
+          // Botón para lanzar la App de Guardia
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.security_outlined, color: Colors.blueGrey),
+              title: const Text('Rol: Guardia / Conserje'),
+              subtitle: const Text('Verificar pases, ver bitácora, abrir accesos.'),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => GuardShell(guardState: globalState.guardState),
+              )),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Botón para lanzar la App de Administrador
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.admin_panel_settings_outlined, color: Colors.teal),
+              title: const Text('Rol: Administrador'),
+              subtitle: const Text('Invitar usuarios, ver dashboard, bitácora.'),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => AdminShell(appState: globalState),
+              )),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Botón para lanzar la App de Visita
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.qr_code_2_outlined, color: Colors.orange),
+              title: const Text('Rol: Visita'),
+              subtitle: const Text('Ingresar código para ver mi pase.'),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => VisitPassPage(residentState: globalState.residentState),
+              )),
+            ),
+          ),
         ],
       ),
     );

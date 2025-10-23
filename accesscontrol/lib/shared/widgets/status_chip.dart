@@ -1,4 +1,4 @@
-import 'package:accesscontrol/state/resident_state.dart';
+import 'package:accesscontrol/shared/models.dart'; // Importación actualizada
 import 'package:flutter/material.dart';
 
 class StatusChip extends StatelessWidget {

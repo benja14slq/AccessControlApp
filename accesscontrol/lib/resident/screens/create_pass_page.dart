@@ -1,5 +1,5 @@
-import 'package:accesscontrol/state/resident_state.dart';
-import 'package:accesscontrol/utils/format.dart';
+import 'package:accesscontrol/resident/state/resident_state.dart';
+import 'package:accesscontrol/shared/utils.dart';
 import 'package:flutter/material.dart';
 
 class CreatePassPage extends StatefulWidget {

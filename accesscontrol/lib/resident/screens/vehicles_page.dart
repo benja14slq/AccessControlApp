@@ -1,4 +1,4 @@
-import 'package:accesscontrol/state/resident_state.dart';
+import 'package:accesscontrol/resident/state/resident_state.dart';
 import 'package:flutter/material.dart';
 
 class VehiclesPage extends StatefulWidget {
