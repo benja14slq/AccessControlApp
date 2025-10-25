@@ -1,16 +1,25 @@
 // lib/main.dart
 
 import 'package:accesscontrol/admin/admin_shell.dart';
+import 'package:accesscontrol/firebase_options.dart';
 import 'package:accesscontrol/guard/guard_shell.dart';
 import 'package:accesscontrol/resident/resident_shell.dart';
 import 'package:accesscontrol/state/app_state.dart';
 import 'package:accesscontrol/visit/screens/visit_pass_page.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 // 1. Inicializamos el estado global
 final AppState globalState = AppState();
 
-void main() {
+Future<void> main() async {
+  // 2. Asegura que Flutter esté inicializado
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // 3. Inicializa Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const RoleSelectorApp());
 }
 
