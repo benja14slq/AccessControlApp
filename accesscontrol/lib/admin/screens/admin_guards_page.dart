@@ -1,9 +1,11 @@
-import 'package:accesscontrol/admin/state/admin_state.dart';
+import 'package:accesscontrol/state/app_state.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class AdminGuardsPage extends StatefulWidget {
-  const AdminGuardsPage({super.key, required this.adminState});
-  final AdminState adminState;
+  const AdminGuardsPage({super.key, required this.appState});
+  final AppState appState;
 
   @override
   State<AdminGuardsPage> createState() => _AdminGuardsPageState();
@@ -11,28 +13,56 @@ class AdminGuardsPage extends StatefulWidget {
 
 class _AdminGuardsPageState extends State<AdminGuardsPage> {
   
-  void _showInviteDialog() {
-    final emailCtrl = TextEditingController();
-    final unitCtrl = TextEditingController();
+  // 1. Nuevos controladores
+  final _emailCtrl = TextEditingController();
+  final _nombreCtrl = TextEditingController();
+  final _apellidoCtrl = TextEditingController();
+
+  // Muestra el diálogo para invitar
+  Future<void> _showInviteDialog() async {
+    final adminState = widget.appState.adminState;
+    if (adminState.isLoadingAdminData) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cargando datos del administrador...'))
+      );
+      return;
+    }
+
+    _emailCtrl.clear();
+    _nombreCtrl.clear();
+    _apellidoCtrl.clear();
     
     showDialog(
       context: context, 
       builder: (ctx) => AlertDialog(
         title: const Text('Invitar Guardia'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Email')),
-            TextField(controller: unitCtrl, decoration: const InputDecoration(labelText: 'Turno/Rol (Ej: Turno Noche)')),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _emailCtrl, 
+                decoration: const InputDecoration(labelText: 'Email del Guardia'),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              // 2. Nuevos campos de Nombre y Apellido
+              TextField(
+                controller: _nombreCtrl,
+                decoration: const InputDecoration(labelText: 'Nombre'),
+                textCapitalization: TextCapitalization.words,
+              ),
+              TextField(
+                controller: _apellidoCtrl,
+                decoration: const InputDecoration(labelText: 'Apellido'),
+                textCapitalization: TextCapitalization.words,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancelar')),
           FilledButton(
-            onPressed: () {
-              widget.adminState.inviteGuard(emailCtrl.text, unitCtrl.text);
-              Navigator.of(ctx).pop();
-            }, 
+            onPressed: () => _createPendingGuard(ctx), 
             child: const Text('Invitar')
           ),
         ],
@@ -40,26 +70,104 @@ class _AdminGuardsPageState extends State<AdminGuardsPage> {
     );
   }
 
+  // 3. Nueva función para crear la invitación en la colección 'Guardias'
+  Future<void> _createPendingGuard(BuildContext dialogContext) async {
+    final email = _emailCtrl.text.trim();
+    final nombre = _nombreCtrl.text.trim();
+    final apellido = _apellidoCtrl.text.trim();
+    final adminUid = FirebaseAuth.instance.currentUser?.uid;
+    final adminCondoName = widget.appState.adminState.adminCondoName;
+
+    if (email.isEmpty || nombre.isEmpty || apellido.isEmpty) {
+      ScaffoldMessenger.of(dialogContext).showSnackBar(
+         const SnackBar(content: Text('Por favor, completa todos los campos.'))
+      );
+      return;
+    }
+
+    // Datos a guardar
+    final Map<String, dynamic> guardData = {
+      'adminUid': adminUid,
+      'correo': email,
+      'nombre': nombre,
+      'apellido': apellido,
+      'estado': 'Pendiente',
+      'rol': 'Guardia',
+      'createdAt': FieldValue.serverTimestamp(),
+      'nombreCondominio': adminCondoName, // Nombre del condominio del admin
+      'uid': null, // Se llenará cuando el guardia se registre
+    };
+
+    try {
+      // 5. Guardamos en la nueva colección 'Guardias'
+      await FirebaseFirestore.instance.collection('Guardias').add(guardData);
+      
+      if (dialogContext.mounted) {
+        Navigator.of(dialogContext).pop(); // Cierra el diálogo
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Guardia invitado con éxito.'))
+        );
+      }
+    } catch (e) {
+      if (dialogContext.mounted) {
+        ScaffoldMessenger.of(dialogContext).showSnackBar(
+          SnackBar(content: Text('Error al invitar guardia: $e'))
+        );
+      }
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
-    final guards = widget.adminState.users.where((u) => u.role == 'Guardia').toList();
+    final adminUid = FirebaseAuth.instance.currentUser?.uid;
 
     return Scaffold(
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: guards.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (context, i) {
-          final user = guards[i];
-          return Card(
-            child: ListTile(
-              title: Text(user.email),
-              subtitle: Text(user.unit),
-              trailing: Chip(
-                label: Text(user.registered ? 'Registrado' : 'Pendiente', style: const TextStyle(fontSize: 12)),
-                backgroundColor: user.registered ? Colors.green.shade50 : Colors.grey.shade200,
-              ),
-            ),
+      // 6. El StreamBuilder ahora apunta a 'Guardias'
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('Guardias')
+            .where('adminUid', isEqualTo: adminUid)
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('Aún no has invitado guardias.'));
+          }
+
+          final guards = snapshot.data!.docs;
+
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: guards.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, i) {
+              final data = guards[i].data() as Map<String, dynamic>;
+              final String estado = data['estado'] ?? 'Pendiente';
+              
+              // 7. Mostramos nombre y apellido
+              final String title = '${data['nombre']} ${data['apellido']}';
+
+              return Card(
+                child: ListTile(
+                  title: Text(title),
+                  subtitle: Text(data['correo'] ?? 'Sin email'),
+                  trailing: Chip(
+                    label: Text(estado, style: const TextStyle(fontSize: 12)),
+                    backgroundColor: estado == 'Registrado' 
+                        ? Colors.green.shade50 
+                        : Colors.grey.shade200,
+                  ),
+                ),
+              );
+            },
           );
         },
       ),

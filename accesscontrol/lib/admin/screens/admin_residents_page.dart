@@ -1,65 +1,213 @@
-import 'package:accesscontrol/admin/state/admin_state.dart';
+// lib/admin/screens/admin_residents_page.dart
+
+import 'package:accesscontrol/state/app_state.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class AdminResidentsPage extends StatefulWidget {
-  const AdminResidentsPage({super.key, required this.adminState});
-  final AdminState adminState;
+  const AdminResidentsPage({super.key, required this.appState});
+  final AppState appState;
 
   @override
   State<AdminResidentsPage> createState() => _AdminResidentsPageState();
 }
 
 class _AdminResidentsPageState extends State<AdminResidentsPage> {
+  // 1. Añadimos controladores para nombre y apellido
+  final _emailCtrl = TextEditingController();
+  final _nombreCtrl = TextEditingController();
+  final _apellidoCtrl = TextEditingController();
+  final _torreCtrl = TextEditingController();
+  final _numeroCtrl = TextEditingController();
   
-  void _showInviteDialog() {
-    final emailCtrl = TextEditingController();
-    final unitCtrl = TextEditingController();
+  String _findCondoTypeName() {
+    try {
+      return widget.appState.condoTypes
+          .firstWhere((t) => t.id == widget.appState.adminState.adminCondoTypeId)
+          .name;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  Future<void> _showInviteDialog() async {
+    final adminState = widget.appState.adminState;
+    if (adminState.isLoadingAdminData) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cargando datos del administrador...'))
+      );
+      return;
+    }
+
+    _emailCtrl.clear();
+    _nombreCtrl.clear();
+    _apellidoCtrl.clear();
+    _torreCtrl.clear();
+    _numeroCtrl.clear();
+
+    final condoTypeName = _findCondoTypeName();
+    final bool isEdificio = condoTypeName.toLowerCase().contains('edificios');
     
     showDialog(
       context: context, 
-      builder: (ctx) => AlertDialog(
-        title: const Text('Invitar Residente'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Email')),
-            TextField(controller: unitCtrl, decoration: const InputDecoration(labelText: 'Unidad (Ej: Depto 101)')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancelar')),
-          FilledButton(
-            onPressed: () {
-              widget.adminState.inviteResident(emailCtrl.text, unitCtrl.text);
-              Navigator.of(ctx).pop();
-            }, 
-            child: const Text('Invitar')
+      builder: (ctx) {
+        // Usamos un SingleChildScrollView por si el teclado es grande
+        return AlertDialog(
+          title: const Text('Invitar Residente'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _emailCtrl, 
+                  decoration: const InputDecoration(labelText: 'Email del Residente'),
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                // 2. Nuevos campos para Nombre y Apellido
+                TextField(
+                  controller: _nombreCtrl, 
+                  decoration: const InputDecoration(labelText: 'Nombre'),
+                  textCapitalization: TextCapitalization.words,
+                ),
+                TextField(
+                  controller: _apellidoCtrl, 
+                  decoration: const InputDecoration(labelText: 'Apellido'),
+                  textCapitalization: TextCapitalization.words,
+                ),
+                
+                if (isEdificio)
+                  TextField(
+                    controller: _torreCtrl, 
+                    decoration: const InputDecoration(labelText: 'Torre / Block')
+                  ),
+                
+                TextField(
+                  controller: _numeroCtrl, 
+                  decoration: InputDecoration(
+                    labelText: isEdificio ? 'Nº Depto' : 'Nº Casa / Parcela'
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
-      )
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: () => _createPendingResident(ctx, isEdificio: isEdificio), 
+              child: const Text('Invitar')
+            ),
+          ],
+        );
+      }
     );
+  }
+
+  // 3. Renombramos la función y cambiamos la lógica
+  Future<void> _createPendingResident(BuildContext dialogContext, {required bool isEdificio}) async {
+    final email = _emailCtrl.text.trim();
+    final nombre = _nombreCtrl.text.trim();
+    final apellido = _apellidoCtrl.text.trim();
+    final numero = _numeroCtrl.text.trim();
+    final torre = _torreCtrl.text.trim();
+    final adminUid = FirebaseAuth.instance.currentUser?.uid;
+
+    // 4. Validamos los nuevos campos
+    if (email.isEmpty || nombre.isEmpty || apellido.isEmpty || numero.isEmpty || (isEdificio && torre.isEmpty)) {
+      ScaffoldMessenger.of(dialogContext).showSnackBar(
+         const SnackBar(content: Text('Por favor, completa todos los campos.'))
+      );
+      return;
+    }
+
+    // Prepara los datos a guardar
+    final Map<String, dynamic> residentData = {
+      'adminUid': adminUid,
+      'correo': email,
+      'nombre': nombre,
+      'apellido': apellido,
+      'estado': 'Pendiente', // El estado inicial es Pendiente
+      'rol': 'Residente',
+      'createdAt': FieldValue.serverTimestamp(),
+      'numero': numero,
+      'torre': isEdificio ? torre : null, // Guarda null si no es edificio
+      'uid': null, 
+      'nombreCondominio': null,
+      'tipoCondominioId': null,
+    };
+
+    try {
+      // 5. Guardamos en la colección 'Residentes'
+      await FirebaseFirestore.instance.collection('Residentes').add(residentData);
+      
+      if (dialogContext.mounted) {
+        Navigator.of(dialogContext).pop(); // Cierra el diálogo
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Residente invitado con éxito.'))
+        );
+      }
+    } catch (e) {
+      // (Manejo de error)
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final residents = widget.adminState.users.where((u) => u.role == 'Residente').toList();
+    final adminUid = FirebaseAuth.instance.currentUser?.uid;
 
     return Scaffold(
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: residents.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (context, i) {
-          final user = residents[i];
-          return Card(
-            child: ListTile(
-              title: Text(user.email),
-              subtitle: Text(user.unit),
-              trailing: Chip(
-                label: Text(user.registered ? 'Registrado' : 'Pendiente', style: const TextStyle(fontSize: 12)),
-                backgroundColor: user.registered ? Colors.green.shade50 : Colors.grey.shade200,
-              ),
-            ),
+      // 6. El StreamBuilder ahora escucha la colección 'Residentes'
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('Residentes') // <-- Colección actualizada
+            .where('adminUid', isEqualTo: adminUid)
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          // (Resto del builder sin cambios...)
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('Aún no has invitado residentes.'));
+          }
+
+          final residents = snapshot.data!.docs;
+
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: residents.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, i) {
+              final data = residents[i].data() as Map<String, dynamic>;
+              
+              final String subtitle = 
+                  data['torre'] != null
+                  ? 'Torre ${data['torre']} - ${data['numero']}' 
+                  : 'Nº ${data['numero']}';
+              
+              final String estado = data['estado'] ?? 'Pendiente';
+              
+              // 7. Usamos nombre y apellido del documento
+              final String title = '${data['nombre']} ${data['apellido']}';
+
+              return Card(
+                child: ListTile(
+                  title: Text(title),
+                  subtitle: Text(subtitle),
+                  trailing: Chip(
+                    label: Text(estado, style: const TextStyle(fontSize: 12)),
+                    backgroundColor: estado == 'Registrado' 
+                        ? Colors.green.shade50 
+                        : Colors.grey.shade200,
+                  ),
+                ),
+              );
+            },
           );
         },
       ),

@@ -1,58 +1,105 @@
-import 'package:accesscontrol/resident/state/resident_state.dart';
-import 'package:flutter/material.dart';
+// lib/resident/screens/settings_page.dart
 
-class SettingsPage extends StatefulWidget {
+import 'package:accesscontrol/auth/login_page.dart';
+import 'package:accesscontrol/resident/state/resident_state.dart';
+import 'package:accesscontrol/state/app_state.dart'; // Importa AppState
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart'; // Necesitarás Provider para esto
+
+class SettingsPage extends StatelessWidget { // Ya no necesita ser StatefulWidget
   const SettingsPage({super.key, required this.state});
   final ResidentState state;
 
-  @override
-  State<SettingsPage> createState() => _SettingsPageState();
-}
+  // Lógica de Logout (movida aquí)
+  Future<void> _logout(BuildContext context) async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      
+      // Obtenemos el AppState (usaremos Provider)
+      final appState = Provider.of<AppState>(context, listen: false);
 
-class _SettingsPageState extends State<SettingsPage> {
+      if (context.mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => LoginPage(appState: appState),
+          ),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      // Manejar error
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text('Cuenta', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Card(
-          child: Column(children: [
-            ListTile(title: const Text('Correo'), trailing: Text(widget.state.residentEmail)),
-            const Divider(height: 0),
-            ListTile(
-              title: const Text('Biometria facial'),
-              trailing: Text(widget.state.hasFaceId ? 'Registrada' : 'Pendiente'),
-              onTap: () => setState(widget.state.toggleFaceId),
+    // 1. Envolvemos la UI en un AnimatedBuilder
+    // Esto escucha a 'state' (que es un ChangeNotifier)
+    return AnimatedBuilder(
+      animation: state,
+      builder: (context, child) {
+        
+        // 2. Mostramos un 'loading' si el estado aún no carga el perfil
+        if (state.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text('Cuenta', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Card(
+              child: Column(children: [
+                ListTile(
+                  title: const Text('Correo'), 
+                  // Usamos los datos del estado
+                  trailing: Text(state.residentEmail)
+                ),
+                ListTile(
+                  title: const Text('Unidad'), 
+                  // Usamos los datos del estado
+                  trailing: Text(state.condoUnit)
+                ),
+                const Divider(height: 0),
+                ListTile(
+                  title: const Text('Biometria facial'),
+                  trailing: Text(state.hasFaceId ? 'Registrada' : 'Pendiente'),
+                  // 3. Llamamos al método async directamente, sin setState
+                  onTap: state.toggleFaceId,
+                ),
+              ]),
             ),
-          ]),
-        ),
-        const SizedBox(height: 16),
-        Text('Preferencias de acceso', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Card(
-          child: Column(children: [
-            SwitchListTile(
-              title: const Text('Notificaciones por email'),
-              value: widget.state.notifEmail, 
-              onChanged: (v) => setState (() => widget.state.setNotifEmail(v)),
+            const SizedBox(height: 16),
+            Text('Preferencias de acceso', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Card(
+              child: Column(children: [
+                SwitchListTile(
+                  title: const Text('Notificaciones por email'),
+                  value: state.notifEmail, // Este valor ahora es 'bool'
+                  // 3. Llamamos al método async directamente
+                  onChanged: state.setNotifEmail,
+                ),
+                const Divider(height: 0),
+                SwitchListTile(
+                  title: const Text('Notificaciones push'),
+                  value: state.notifPush, // Este valor ahora es 'bool'
+                  // 3. Llamamos al método async directamente
+                  onChanged: state.setNotifPush,
+                ),
+              ]),
             ),
-            const Divider(height: 0),
-            SwitchListTile(
-              title: const Text('Notificaciones push'),
-              value: widget.state.notifPush,
-              onChanged: (v) => setState(() => widget.state.setNotifPush(v)),
+            const SizedBox(height: 24),
+            OutlinedButton.icon(
+              onPressed: () => _logout(context), // Llama al logout real
+              icon: const Icon(Icons.logout), 
+              label: const Text('Cerrar Sesión'),
             ),
-          ]),
-        ),
-        const SizedBox(height: 24),
-        OutlinedButton.icon(
-          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cerrar sesión (demo)'))),
-          icon: const Icon(Icons.logout), 
-          label: const Text('Cerrar Sesión'),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }

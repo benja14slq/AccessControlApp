@@ -1,35 +1,55 @@
-import 'package:accesscontrol/shared/models.dart';
+// lib/admin/state/admin_state.dart
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class AdminState extends ChangeNotifier {
   
-  // Lista de todos los usuarios registrados en el condominio
-  final List<CondoUser> users = [];
+  // DATOS DEL ADMIN LOGUEADO
+  String? adminUid; // <-- CAMBIO: Guardamos el UID
+  String? adminCondoName;
+  String? adminCondoTypeId;
+  bool isLoadingAdminData = true;
   
-  // Datos de maqueta
   AdminState() {
-    users.addAll([
-      CondoUser(email: 'residente@condo.cl', role: 'Residente', unit: 'Depto 101', registered: true),
-      CondoUser(email: 'guardia_dia@condo.cl', role: 'Guardia', unit: 'Turno Día', registered: true),
-      CondoUser(email: 'vecino_nuevo@gmail.com', role: 'Residente', unit: 'Depto 202', registered: false),
-    ]);
   }
 
-  // Lógica de invitación
-  void inviteResident(String email, String unit) {
-    if (email.isEmpty || unit.isEmpty) return;
-    users.insert(0, CondoUser(email: email, role: 'Residente', unit: unit, registered: false));
-    notifyListeners();
-  }
+  Future<void> loadAdminData() async {
+    // Si ya está cargado, no lo hagas de nuevo (opcional)
+    if (!isLoadingAdminData && adminUid != null) return; 
 
-  void inviteGuard(String email, String unit) {
-    if (email.isEmpty || unit.isEmpty) return;
-    users.insert(0, CondoUser(email: email, role: 'Guardia', unit: unit, registered: false));
+    isLoadingAdminData = true;
     notifyListeners();
-  }
-  
-  void revokeAccess(int index) {
-      users.removeAt(index);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('Usuario no autenticado');
+      }
+
+      adminUid = user.uid;
+
+      final doc = await FirebaseFirestore.instance
+          .collection('Administradores')
+          .doc(adminUid)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data()!;
+        
+        // --- Debug Print (puedes borrar esto después) ---
+        print("Datos del admin cargados en loadAdminData: $data"); 
+        // ---------------------------------------------
+        
+        adminCondoName = data['nombreCondominio'];
+        adminCondoTypeId = data['tipoCondominioId'];
+      }
+    } catch (e) {
+      print('Error cargando datos del admin: $e');
+    } finally {
+      isLoadingAdminData = false;
       notifyListeners();
+    }
   }
 }

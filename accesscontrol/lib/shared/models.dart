@@ -8,6 +8,7 @@ class VisitPass {
     required this.id,
     required this.code,
     required this.visitorName,
+    this.visitorLastName,
     this.visitorId,
     this.phone,
     this.plate,
@@ -18,6 +19,7 @@ class VisitPass {
   final String id;
   final String code;
   final String visitorName;
+  final String? visitorLastName; // AÑADIDO
   final String? visitorId;
   final String? phone;
   final String? plate;
@@ -59,3 +61,18 @@ class AccessEvent {
 // (También movidas de resident_state.dart para ser reutilizables)
 String mkId() => Random().nextInt(0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase();
 String mkCode() => 'PASS-${Random().nextInt(0xFFFF).toRadixString(16).padLeft(4, '0').toUpperCase()}';
+
+class CondoType {
+  final String id;
+  final String name;
+
+  CondoType({required this.id, required this.name});
+
+  // Factory para crear una instancia desde un documento de Firestore
+  factory CondoType.fromFirestore(Map<String, dynamic> data, String documentId) {
+    return CondoType(
+      id: documentId,
+      name: data['name'] ?? 'Nombre no encontrado',
+    );
+  }
+}

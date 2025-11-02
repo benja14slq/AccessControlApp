@@ -2,6 +2,7 @@ import 'package:accesscontrol/admin/screens/admin_dashboard_page.dart';
 import 'package:accesscontrol/admin/screens/admin_guards_page.dart';
 import 'package:accesscontrol/admin/screens/admin_logbook_page.dart';
 import 'package:accesscontrol/admin/screens/admin_residents_page.dart';
+import 'package:accesscontrol/admin/screens/admin_settings_page.dart';
 import 'package:accesscontrol/state/app_state.dart';
 import 'package:flutter/material.dart';
 
@@ -17,12 +18,20 @@ class _AdminShellState extends State<AdminShell> {
   int index = 0;
 
   @override
+  void initState() {
+    super.initState();
+    // Llama a la función de carga AHORA, después de que el login fue exitoso.
+    widget.appState.adminState.loadAdminData();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final pages = [
-      AdminDashboardPage(appState: widget.appState), // Estadísticas
-      AdminResidentsPage(adminState: widget.appState.adminState), // Gestionar Residentes
-      AdminGuardsPage(adminState: widget.appState.adminState),    // Gestionar Guardias
-      AdminLogbookPage(guardState: widget.appState.guardState),   // Bitácora global
+      AdminDashboardPage(appState: widget.appState), 
+      AdminResidentsPage(appState: widget.appState),
+      AdminGuardsPage(appState: widget.appState),
+      AdminLogbookPage(appState: widget.appState), 
+      AdminSettingsPage(appState: widget.appState),
     ];
 
     return Scaffold(
@@ -36,6 +45,7 @@ class _AdminShellState extends State<AdminShell> {
           NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Residentes'),
           NavigationDestination(icon: Icon(Icons.security_outlined), selectedIcon: Icon(Icons.security), label: 'Guardias'),
           NavigationDestination(icon: Icon(Icons.book_outlined), selectedIcon: Icon(Icons.book), label: 'Bitácora'),
+          NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Cuenta'),
         ],
       ),
     );

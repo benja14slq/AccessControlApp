@@ -1,3 +1,4 @@
+import 'package:accesscontrol/guard/screens/guard_scanner_page.dart';
 import 'package:accesscontrol/guard/state/guard_state.dart';
 import 'package:flutter/material.dart';
 
@@ -13,17 +14,39 @@ class _GuardVerifyPageState extends State<GuardVerifyPage> {
   final _codeCtrl = TextEditingController();
   String _result = '';
   bool _isSuccess = false;
+  bool _isLoading = false;
 
-  void _verify() {
-    final code = _codeCtrl.text.trim();
-    if (code.isEmpty) return;
+  Future<void> _verify([String? codeFromScanner]) async {
+    final code = codeFromScanner ?? _codeCtrl.text.trim();
+    if (code.isEmpty || _isLoading) return;
     
-    final result = widget.state.verifyPass(code);
     setState(() {
-      _result = result;
-      _isSuccess = result.startsWith('PASE AUTORIZADO');
+      _isLoading = true;
+      _result = '';
+      _codeCtrl.text = code;
     });
-    _codeCtrl.clear();
+    
+    // 3. Llama a la función async del estado
+    final result = await widget.state.verifyPass(code);
+    
+    // 4. Actualiza la UI
+    if (mounted) {
+      setState(() {
+        _result = result;
+        _isSuccess = result.startsWith('PASE AUTORIZADO');
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _openScanner() async {
+    final scannedCode = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const GuardScannerPage()),
+    );
+
+    if (scannedCode != null && scannedCode.isNotEmpty){
+      _verify(scannedCode);
+    }
   }
 
   @override
@@ -38,11 +61,14 @@ class _GuardVerifyPageState extends State<GuardVerifyPage> {
             textCapitalization: TextCapitalization.characters,
             decoration: const InputDecoration(labelText: 'Ingresar código de pase'),
             onSubmitted: (_) => _verify(),
+            enabled: !_isLoading,
           ),
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: _verify, 
-            icon: const Icon(Icons.check_circle_outline), 
+            onPressed: _isLoading ? null : () => _verify(), 
+            icon: _isLoading
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.check_circle_outline),
             label: const Text('Verificar Pase'),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           ),
@@ -67,9 +93,8 @@ class _GuardVerifyPageState extends State<GuardVerifyPage> {
             ),
           
           const Spacer(),
-          // Botón de "Escanear QR" (simulado)
           OutlinedButton.icon(
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Simulación de escáner QR'))), 
+            onPressed: _isLoading ? null : _openScanner, 
             icon: const Icon(Icons.qr_code_scanner), 
             label: const Text('Escanear QR'),
             style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
