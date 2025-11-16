@@ -1,22 +1,19 @@
-// lib/resident/screens/settings_page.dart
-
 import 'package:accesscontrol/auth/login_page.dart';
+import 'package:accesscontrol/resident/screens/family_page.dart';
 import 'package:accesscontrol/resident/state/resident_state.dart';
-import 'package:accesscontrol/state/app_state.dart'; // Importa AppState
+import 'package:accesscontrol/state/app_state.dart'; 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; // Necesitarás Provider para esto
+import 'package:provider/provider.dart'; 
 
-class SettingsPage extends StatelessWidget { // Ya no necesita ser StatefulWidget
+class SettingsPage extends StatelessWidget { 
   const SettingsPage({super.key, required this.state});
   final ResidentState state;
 
-  // Lógica de Logout (movida aquí)
   Future<void> _logout(BuildContext context) async {
     try {
       await FirebaseAuth.instance.signOut();
       
-      // Obtenemos el AppState (usaremos Provider)
       final appState = Provider.of<AppState>(context, listen: false);
 
       if (context.mounted) {
@@ -34,8 +31,6 @@ class SettingsPage extends StatelessWidget { // Ya no necesita ser StatefulWidge
 
   @override
   Widget build(BuildContext context) {
-    // 1. Envolvemos la UI en un AnimatedBuilder
-    // Esto escucha a 'state' (que es un ChangeNotifier)
     return AnimatedBuilder(
       animation: state,
       builder: (context, child) {
@@ -64,10 +59,36 @@ class SettingsPage extends StatelessWidget { // Ya no necesita ser StatefulWidge
                 ),
                 const Divider(height: 0),
                 ListTile(
+                  title: const Text('Grupo Familiar'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: (){
+                    Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => FamilyPage(state: state), 
+                    ));
+                  },
+                ),
+                const Divider(height: 0),
+                ListTile(
                   title: const Text('Biometria facial'),
-                  trailing: Text(state.hasFaceId ? 'Registrada' : 'Pendiente'),
-                  // 3. Llamamos al método async directamente, sin setState
-                  onTap: state.toggleFaceId,
+                  trailing: Text(state.hasFaceId ? 'Registrada' : 'Registrar ahora'),
+                  onTap: state.hasFaceId
+                    ? null
+                    : () async {
+                      try {
+                        await state.registerFaceId();
+                        if (context.mounted){
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Rostro registrado con éxito.')),
+                          );
+                        }
+                      } catch (e){
+                        if (context.mounted){
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.red),
+                          );
+                        }
+                      }
+                    },
                 ),
               ]),
             ),

@@ -1,9 +1,12 @@
-// lib/resident/state/resident_state.dart
-
 import 'dart:async';
 import 'package:accesscontrol/shared/models.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:io';
+import 'package:accesscontrol/shared/api_constants.dart';
 
 // Asegúrate de que mkCode esté disponible
 import 'dart:math';
@@ -15,6 +18,7 @@ class ResidentState extends ChangeNotifier {
   late final DocumentReference _residentDocRef;
 
   final List<StreamSubscription> _subscriptions = [];
+  List<FamilyMember> familyMembers = [];
 
   // --- DATOS DEL ESTADO ---
   String residentEmail = '';
@@ -67,6 +71,7 @@ class ResidentState extends ChangeNotifier {
         _loadProfile(),
         _loadVehicles(),
         _loadVisits(), // Este ahora carga solo las futuras programadas
+        _loadFamilyMembers(),
       ]);
     } catch (e) {
       print("Error durante la carga inicial de datos: $e");
@@ -167,7 +172,23 @@ class ResidentState extends ChangeNotifier {
     _subscriptions.add(sub);
     return completer.future;
   }
-  // --- FIN _loadVisits CORREGIDO ---
+
+  Future<void> _loadFamilyMembers(){
+    final completer = Completer<void>();
+    final sub = _residentDocRef.collection('GrupoFamiliar').snapshots().listen(
+      (snapshot){
+        if (!completer.isCompleted) completer.complete();
+        familyMembers = snapshot.docs.map((doc) => FamilyMember.fromFirestore(doc)).toList();
+        notifyListeners();
+      },
+      onError: (error) {
+        if (!completer.isCompleted) completer.completeError(error);
+        print("Error en stream _loadFamilyMembers: $error");
+      }
+    );
+    _subscriptions.add(sub);
+    return completer.future;
+  }
 
   // --- MÉTODOS DE ESCRITURA ---
   Future<void> addVehicle(String plate, String? alias) async {
@@ -217,11 +238,123 @@ class ResidentState extends ChangeNotifier {
       // throw Exception('No se pudo crear la visita.');
     }
   }
+
+  Future<void> addFamilyMember({
+    required String nombre,
+    required String apellido,
+    String? rut,
+  }) async {
+    try {
+      await _residentDocRef.collection('GrupoFamiliar').add({
+        'nombre': nombre,
+        'apellido': apellido,
+        'rut': rut,
+        'hasFaceId': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('Error al añadir miembro familiar: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> registerFamilyMemberFace(String memberId) async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? photo = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.front,
+        imageQuality: 80,
+        maxWidth: 1080,
+      );
+
+      if (photo == null) return;
+
+      final bytes = await File(photo.path).readAsBytes();
+      final String base64Image = base64Encode(bytes);
+
+      // 1. Llama a la *misma* Lambda de registro
+      final Uri registerUrl = Uri.parse('$apiGatewayUrl/register');
+      final response = await http.post(
+        registerUrl,
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+        body: jsonEncode({ 'imageBase64': base64Image }),
+      );
+
+      if (response.statusCode != 200) {
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['error'] ?? 'No se pudo registrar el rostro.');
+      }
+
+      final data = jsonDecode(response.body);
+      final String faceId = data['faceId'];
+
+      // 2. Guarda el FaceId en el documento del *miembro familiar*
+      await _residentDocRef.collection('GrupoFamiliar').doc(memberId).update({
+        'hasFaceId': true,
+        'rekognitionFaceId': faceId,
+      });
+
+      // El listener _loadFamilyMembers se encargará de actualizar la UI
+      
+    } catch (e) {
+      print('Error al registrar rostro familiar: $e');
+      rethrow;
+    }
+  }
+
   Future<void> toggleFaceId() async { await _residentDocRef.update({'hasFaceId': !hasFaceId}); }
   Future<void> setNotifEmail(bool v) async { notifEmail = v; notifyListeners(); await _residentDocRef.update({'notifEmail': v}); }
   Future<void> setNotifPush(bool v) async { notifPush = v; notifyListeners(); await _residentDocRef.update({'notifPush': v}); }
 
 
+  Future<void> registerFaceId() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? photo = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.front,
+        imageQuality: 80,
+        maxWidth: 1080,
+      );
+
+      if (photo == null) return; 
+
+      final bytes = await File(photo.path).readAsBytes();
+      final String base64Image = base64Encode(bytes);
+
+      // --- USA LAS CONSTANTES AQUÍ ---
+      final Uri registerUrl = Uri.parse('$apiGatewayUrl/register');
+      
+      final response = await http.post(
+        registerUrl,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey, // <-- Usa la constante
+        },
+        body: jsonEncode({
+          'imageBase64': base64Image,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final String faceId = data['faceId']; 
+
+        await _residentDocRef.update({
+          'hasFaceId': true,
+          'rekognitionFaceId': faceId, 
+        });
+        
+      } else {
+        print('Error del servidor: ${response.body}');
+        throw Exception('No se pudo registrar el rostro.');
+      }
+    } catch (e) {
+      print('Error al registrar rostro: $e');
+      rethrow; 
+    }
+  }
   // --- GETTERS SIMPLIFICADOS ---
 
   /// Retorna la lista completa de visitas futuras programadas (ya filtrada y ordenada)

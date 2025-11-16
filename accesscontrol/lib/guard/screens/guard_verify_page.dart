@@ -1,6 +1,7 @@
 import 'package:accesscontrol/guard/screens/guard_scanner_page.dart';
 import 'package:accesscontrol/guard/state/guard_state.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 class GuardVerifyPage extends StatefulWidget {
   const GuardVerifyPage({super.key, required this.state});
@@ -49,6 +50,26 @@ class _GuardVerifyPageState extends State<GuardVerifyPage> {
     }
   }
 
+  Future<void> _verifyFace() async {
+    if (_isLoading) return;
+
+    setState(() {
+      _isLoading = true;
+      _result = '';
+      _codeCtrl.clear(); // Limpiamos el campo de texto
+    });
+
+    final result = await widget.state.verifyFaceByImage();
+
+    if (mounted) {
+      setState(() {
+        _result = result['message'];
+        _isSuccess = result['success'];
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -71,6 +92,13 @@ class _GuardVerifyPageState extends State<GuardVerifyPage> {
                 : const Icon(Icons.check_circle_outline),
             label: const Text('Verificar Pase'),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _isLoading ? null : _verifyFace,
+            icon: const Icon(Icons.camera_front_outlined),  
+            label: const Text('Verificar por Rostro'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           ),
           const SizedBox(height: 24),
           if (_result.isNotEmpty)
@@ -96,7 +124,7 @@ class _GuardVerifyPageState extends State<GuardVerifyPage> {
           OutlinedButton.icon(
             onPressed: _isLoading ? null : _openScanner, 
             icon: const Icon(Icons.qr_code_scanner), 
-            label: const Text('Escanear QR'),
+            label: const Text('Escanear QR (Pase de visita)'),
             style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           ),
         ],

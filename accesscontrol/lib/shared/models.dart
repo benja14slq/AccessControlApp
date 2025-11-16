@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 // MODELOS COMPARTIDOS
 enum VisitStatus { programada, autorizada, rechazada, expirada }
 
@@ -73,6 +75,33 @@ class CondoType {
     return CondoType(
       id: documentId,
       name: data['name'] ?? 'Nombre no encontrado',
+    );
+  }
+}
+
+class FamilyMember {
+  final String id; // Document ID
+  final String nombre;
+  final String apellido;
+  final String? rut;
+  final bool hasFaceId;
+
+  FamilyMember({
+    required this.id,
+    required this.nombre,
+    required this.apellido,
+    this.rut,
+    this.hasFaceId = false,
+  });
+
+  factory FamilyMember.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return FamilyMember(
+      id: doc.id,
+      nombre: data['nombre'] ?? '',
+      apellido: data['apellido'] ?? '',
+      rut: data['rut'],
+      hasFaceId: data['hasFaceId'] ?? false,
     );
   }
 }

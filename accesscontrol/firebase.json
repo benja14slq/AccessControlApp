@@ -1,1 +1,42 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"bd-accesscontrol","appId":"1:1085979298351:android:58a6b13a1182a7794014da","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"bd-accesscontrol","configurations":{"android":"1:1085979298351:android:58a6b13a1182a7794014da","ios":"1:1085979298351:ios:6bd86ac91b3884a44014da","macos":"1:1085979298351:ios:6bd86ac91b3884a44014da","web":"1:1085979298351:web:d31eaf472cfa04f24014da","windows":"1:1085979298351:web:8269553ed57f3c6c4014da"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "bd-accesscontrol",
+          "appId": "1:1085979298351:android:58a6b13a1182a7794014da",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "bd-accesscontrol",
+          "configurations": {
+            "android": "1:1085979298351:android:58a6b13a1182a7794014da",
+            "ios": "1:1085979298351:ios:6bd86ac91b3884a44014da",
+            "macos": "1:1085979298351:ios:6bd86ac91b3884a44014da",
+            "web": "1:1085979298351:web:d31eaf472cfa04f24014da",
+            "windows": "1:1085979298351:web:8269553ed57f3c6c4014da"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint"
+      ],
+      "source": "functions"
+    }
+  ]
+}

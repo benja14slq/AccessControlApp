@@ -2,6 +2,11 @@ import 'dart:async';
 import 'package:accesscontrol/shared/models.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:io';
+import 'package:accesscontrol/shared/api_constants.dart';
 
 class GuardState extends ChangeNotifier{
   final String uid;
@@ -15,9 +20,10 @@ class GuardState extends ChangeNotifier{
   List<AccessEvent> events = [];
   bool isLoading = true;
 
+  String get adminUid => _adminUid;
+
   GuardState({required this.uid});
 
-  // --- 1. INICIALIZACIÓN ---
   Future<void> init() async {
     isLoading = true;
     notifyListeners();
@@ -33,7 +39,6 @@ class GuardState extends ChangeNotifier{
       _guardDocRef = query.docs.first.reference;
       final data = query.docs.first.data();
       
-      // Guardamos datos importantes del guardia
       _adminUid = data['adminUid'];
       _guardFullName = '${data['nombre']} ${data['apellido']}';
       
@@ -47,14 +52,12 @@ class GuardState extends ChangeNotifier{
     }
   }
 
-  // --- 2. CARGA DE DATOS (BITÁCORA) ---
   Future<void> _loadEvents() {
     final completer = Completer<void>();
-    // Escuchamos la colección de Eventos, filtrada por el admin
     final sub = _db.collection('Eventos')
         .where('adminUid', isEqualTo: _adminUid)
         .orderBy('timestamp', descending: true)
-        .limit(100) // Trae los 100 eventos más recientes
+        .limit(100)
         .snapshots()
         .listen((snapshot) {
       
@@ -76,14 +79,12 @@ class GuardState extends ChangeNotifier{
     _subscriptions.add(sub);
     return completer.future;
   }
-  
-  // --- 3. LÓGICA DE VERIFICACIÓN (CONECTADA A FIRESTORE) ---
+
   Future<String> verifyPass(String code) async {
     try {
-      // 1. Busca el pase en la colección 'Visitas'
       final query = await _db.collection('Visitas')
           .where('code', isEqualTo: code.toUpperCase())
-          .where('adminUid', isEqualTo: _adminUid) // Importante: solo visitas de este condominio
+          .where('adminUid', isEqualTo: _adminUid) 
           .where('status', isEqualTo: 'programada')
           .limit(1)
           .get();
@@ -95,23 +96,150 @@ class GuardState extends ChangeNotifier{
       final visitDoc = query.docs.first;
       final data = visitDoc.data();
 
-      // 2. Si lo encuentra, actualiza el estado en Firestore
+      final String residentUid = data['residentUid'];
+      String residentName = 'N/A';
+      String? residentTower;
+      String? residentUnit;
+      try {
+        final residentDoc = await _db.collection('Residentes').doc(residentUid).get();
+        if (residentDoc.exists) {
+          final resData = residentDoc.data()!;
+          residentName = '${resData['nombre']} ${resData['apellido']}';
+          residentTower = resData['torre'];
+          residentUnit = resData['numero'];
+        }
+      } catch (e) { /* Ignorar error si no se encuentra el residente */ }
+
       await visitDoc.reference.update({
         'status': 'autorizada',
-        'checkedByGuardUid': uid, // Opcional: guarda qué guardia lo aprobó
+        'checkedByGuardUid': uid,
       });
       
-      // 3. Crea un evento en la bitácora
       final description = 'Ingreso autorizado: ${data['visitorName']} (Pase: $code)';
-      await _logEvent(description: description, status: 'autorizada');
+      await _logEvent(
+        description: description, 
+        status: 'autorizada_qr',
+        residentUid: residentUid,
+        residentName: residentName,
+        residentTower: residentTower,
+        residentUnit: residentUnit,
+      );
       
       return 'PASE AUTORIZADO:\n${data['visitorName']}';
       
     } catch (e) {
-      // 4. Si falla, registra el evento y retorna el error
       final description = 'Ingreso rechazado. Código: $code';
       await _logEvent(description: description, status: 'rechazada');
       return e.toString().contains('Exception:') ? e.toString().split(': ')[1] : e.toString();
+    }
+  }
+
+  Future<Map<String, dynamic>> verifyFaceByImage() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? photo = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+        imageQuality: 80,
+        maxWidth: 1080,
+      );
+
+      if (photo == null) {
+        throw Exception('Captura cancelada.');
+      }
+
+      final bytes = await File(photo.path).readAsBytes();
+      final String base64Image = base64Encode(bytes);
+
+      final Uri verifyUrl = Uri.parse('$apiGatewayUrl/verify');
+      
+      final response = await http.post(
+        verifyUrl,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+        },
+        body: jsonEncode({
+          'imageBase64': base64Image,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Error del servidor: ${response.body}');
+      }
+
+      final data = jsonDecode(response.body);
+      
+      if (data['match'] == false || data['faceId'] == null) {
+        throw Exception('ROSTRO NO RECONOCIDO.');
+      }
+      
+      final String faceId = data['faceId'];
+      final double similarity = data['similarity'];
+
+      final residentQuery = await _db.collection('Residentes')
+          .where('adminUid', isEqualTo: _adminUid) 
+          .where('rekognitionFaceId', isEqualTo: faceId)
+          .limit(1)
+          .get();
+
+      DocumentSnapshot? docEncontrado;
+      String tipoMiembro = "Residente";
+      DocumentReference? residenteDocRef;
+
+      if (residentQuery.docs.isNotEmpty) {
+        docEncontrado = residentQuery.docs.first;
+        residenteDocRef = docEncontrado.reference;
+      } else {
+        // 2. Si no lo encuentra, busca en las sub-colecciones 'GrupoFamiliar'
+        final familyQuery = await _db.collectionGroup('GrupoFamiliar')
+            .where('rekognitionFaceId', isEqualTo: faceId)
+            .limit(1)
+            .get();
+
+        if (familyQuery.docs.isNotEmpty) {
+          docEncontrado = familyQuery.docs.first;
+          tipoMiembro = "Grupo Familiar";
+          residenteDocRef = docEncontrado.reference.parent.parent;
+        }
+      }
+
+      if (docEncontrado == null || residenteDocRef == null) {
+        throw Exception('Rostro reconocido, pero no asociado a este condominio.');
+      }
+
+      final personData = docEncontrado.data() as Map<String, dynamic>;
+      final String personName = '${personData['nombre']} ${personData['apellido']}';
+
+      final residentDoc = await residenteDocRef.get();
+      final residentData = residentDoc.data() as Map<String, dynamic>;
+      final String unit = residentData['torre'] != null
+          ? 'Torre ${residentData['torre']} - ${residentData['numero']}'
+          : 'Nº ${residentData['numero']}';
+
+      final description = 'Ingreso facial: $personName ($tipoMiembro)';
+      
+      await _logEvent(
+        description: description, 
+        status: 'autorizada_facial',
+        residentUid: residentData['uid'],
+        residentName: '${residentData['nombre']} ${residentData['apellido']}',
+        residentTower: residentData['torre'],
+        residentUnit: residentData['numero'],
+      );
+      
+      return {
+        'success': true,
+        'message': 'ACCESO AUTORIZADO:\n$personName ($tipoMiembro)\n$unit'
+      };
+
+    } catch (e) {
+      final description = 'Ingreso facial rechazado: ${e.toString()}';
+      await _logEvent(description: description, status: 'rechazada_facial');
+      return {
+        'success': false,
+        'message': e.toString().contains('Exception:') ? e.toString().split(': ')[1] : e.toString()
+      };
     }
   }
 
@@ -122,7 +250,14 @@ class GuardState extends ChangeNotifier{
   }
 
   // --- 5. FUNCIÓN INTERNA PARA BITÁCORA ---
-  Future<void> _logEvent({required String description, required String status}) async {
+  Future<void> _logEvent({
+    required String description, 
+    required String status,
+    String? residentUid,
+    String? residentName,
+    String? residentTower,
+    String? residentUnit,
+  }) async {
     try {
       await _db.collection('Eventos').add({
         'adminUid': _adminUid,
@@ -130,6 +265,11 @@ class GuardState extends ChangeNotifier{
         'description': description,
         'status': status,
         'timestamp': FieldValue.serverTimestamp(),
+        // --- NUEVOS CAMPOS PARA FILTROS ---
+        'residentUid': residentUid,
+        'residentName': residentName,
+        'residentTower': residentTower,
+        'residentUnit': residentUnit,
       });
     } catch (e) {
       print("Error al guardar evento: $e");
