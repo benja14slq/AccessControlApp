@@ -55,9 +55,6 @@ class _CreatePassPageState extends State<CreatePassPage> {
     setState(() => _isLoading = true);
 
     try {
-      // --- 2. LÓGICA ACTUALIZADA PARA LA PATENTE ---
-      // Si _hasVehicle es falso, siempre envía null.
-      // Si es verdadero, envía el texto (o null si está vacío).
       final String? plateValue = _hasVehicle
           ? (_plateCtrl.text.trim().isEmpty ? null : _plateCtrl.text.trim().toUpperCase())
           : null;

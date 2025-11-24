@@ -34,6 +34,7 @@ class SettingsPage extends StatelessWidget {
     return AnimatedBuilder(
       animation: state,
       builder: (context, child) {
+        final biometricsEnabled = state.condoConfig['biometricsEnabled'] ?? true;
         
         // 2. Mostramos un 'loading' si el estado aún no carga el perfil
         if (state.isLoading) {
@@ -67,29 +68,31 @@ class SettingsPage extends StatelessWidget {
                     ));
                   },
                 ),
-                const Divider(height: 0),
-                ListTile(
-                  title: const Text('Biometria facial'),
-                  trailing: Text(state.hasFaceId ? 'Registrada' : 'Registrar ahora'),
-                  onTap: state.hasFaceId
-                    ? null
-                    : () async {
-                      try {
-                        await state.registerFaceId();
-                        if (context.mounted){
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Rostro registrado con éxito.')),
-                          );
+                if (biometricsEnabled)...[
+                  const Divider(height: 0),
+                  ListTile(
+                    title: const Text('Biometria facial'),
+                    trailing: Text(state.hasFaceId ? 'Registrada' : 'Registrar ahora'),
+                    onTap: state.hasFaceId
+                      ? null
+                      : () async {
+                        try {
+                          await state.registerFaceId();
+                          if (context.mounted){
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Rostro registrado con éxito.')),
+                            );
+                          }
+                        } catch (e){
+                          if (context.mounted){
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.red),
+                            );
+                          }
                         }
-                      } catch (e){
-                        if (context.mounted){
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.red),
-                          );
-                        }
-                      }
-                    },
-                ),
+                      },
+                  ),
+                ]
               ]),
             ),
             const SizedBox(height: 16),
@@ -106,9 +109,9 @@ class SettingsPage extends StatelessWidget {
                 const Divider(height: 0),
                 SwitchListTile(
                   title: const Text('Notificaciones push'),
-                  value: state.notifPush, // Este valor ahora es 'bool'
+                  value: state.notifApp, // Este valor ahora es 'bool'
                   // 3. Llamamos al método async directamente
-                  onChanged: state.setNotifPush,
+                  onChanged: state.setNotifApp,
                 ),
               ]),
             ),

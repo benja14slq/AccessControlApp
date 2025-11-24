@@ -20,8 +20,6 @@ class _AdminShellState extends State<AdminShell> {
   @override
   void initState() {
     super.initState();
-    // Llama a la función de carga AHORA, después de que el login fue exitoso.
-    widget.appState.adminState.loadAdminData();
   }
 
   @override

@@ -1,7 +1,6 @@
 import 'package:accesscontrol/guard/screens/guard_scanner_page.dart';
 import 'package:accesscontrol/guard/state/guard_state.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 
 class GuardVerifyPage extends StatefulWidget {
   const GuardVerifyPage({super.key, required this.state});
@@ -27,16 +26,24 @@ class _GuardVerifyPageState extends State<GuardVerifyPage> {
       _codeCtrl.text = code;
     });
     
-    // 3. Llama a la función async del estado
-    final result = await widget.state.verifyPass(code);
-    
-    // 4. Actualiza la UI
-    if (mounted) {
-      setState(() {
-        _result = result;
-        _isSuccess = result.startsWith('PASE AUTORIZADO');
-        _isLoading = false;
-      });
+    try {
+      final result = await widget.state.verifyPass(code);
+
+      if (mounted) {
+        setState(() {
+          _result = result;
+          _isSuccess = result.startsWith('PASE AUTORIZADO');
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _result = e.toString().replaceAll("Exception: ", "");
+          _isSuccess = false;
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -56,7 +63,7 @@ class _GuardVerifyPageState extends State<GuardVerifyPage> {
     setState(() {
       _isLoading = true;
       _result = '';
-      _codeCtrl.clear(); // Limpiamos el campo de texto
+      _codeCtrl.clear();
     });
 
     final result = await widget.state.verifyFaceByImage();
@@ -70,8 +77,31 @@ class _GuardVerifyPageState extends State<GuardVerifyPage> {
     }
   }
 
+  Future<void> _verifyPlate() async {
+    if (_isLoading) return;
+
+    setState(() {
+      _isLoading = true;
+      _result = '';
+      _codeCtrl.clear();
+    });
+
+    final result = await widget.state.verifyPlateByLPR();
+
+    if (mounted){
+      setState(() {
+        _result = result['message'];
+        _isSuccess = result['success'];
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final config = widget.state.condoConfig;
+    final lprEnabled = config['lprEnabled'] ?? true;
+    final biometricsEnabled = config['biometricsEnabled'] ?? true;
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -93,13 +123,24 @@ class _GuardVerifyPageState extends State<GuardVerifyPage> {
             label: const Text('Verificar Pase'),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _isLoading ? null : _verifyFace,
-            icon: const Icon(Icons.camera_front_outlined),  
-            label: const Text('Verificar por Rostro'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-          ),
+          if (lprEnabled) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _isLoading ? null : _verifyPlate,
+              icon: const Icon(Icons.directions_car_outlined),
+              label: const Text('Escanear Patente (LPR)'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            ),
+          ],
+          if (biometricsEnabled) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _isLoading ? null : _verifyFace,
+              icon: const Icon(Icons.camera_front_outlined),
+              label: const Text('Verificar por Rostro'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            ),
+          ],
           const SizedBox(height: 24),
           if (_result.isNotEmpty)
             Container(

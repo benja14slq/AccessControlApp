@@ -1,50 +1,210 @@
+import 'dart:async';
 import 'package:accesscontrol/guard/state/guard_state.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-class GuardManualPage extends StatelessWidget {
+class GuardManualPage extends StatefulWidget {
   const GuardManualPage({super.key, required this.state});
   final GuardState state;
 
-  void _open(BuildContext context, String gate) {
-    state.triggerManualAccess(gate);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Accionando: $gate')));
+  @override
+  State<GuardManualPage> createState() => _GuardManualPageState();
+}
+
+class _GuardManualPageState extends State<GuardManualPage> {
+  // Controladores para selección
+  String? _selectedTower;
+  String? _selectedResidentUid; // Aquí guardamos al residente seleccionado
+  final _visitorNameCtrl = TextEditingController();
+
+  bool _isLoading = false;
+  String _result = '';
+  bool _isSuccess = false;
+  bool _isNotifying = false;
+  StreamSubscription? _notificationSub;
+
+  @override
+  void dispose() {
+    _visitorNameCtrl.dispose();
+    _notificationSub?.cancel();
+    super.dispose();
+  }
+
+  // Filtra la lista de residentes según la torre seleccionada (si hay torres)
+  List<Map<String, dynamic>> _getFilteredResidents() {
+    if (widget.state.towers.isEmpty) {
+      return widget.state.residentsList; // Si no hay torres, devuelve todos
+    }
+    if (_selectedTower == null) {
+      return []; // Si hay torres pero no seleccionó ninguna
+    }
+    return widget.state.residentsList.where((r) => r['torre'] == _selectedTower).toList();
+  }
+
+  Future<void> _processAction({required bool isNotification}) async {
+    if (_selectedResidentUid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecciona un residente')));
+      return;
+    }
+    if (isNotification && _visitorNameCtrl.text.isEmpty) {
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ingresa nombre del visitante')));
+       return;
+    }
+
+    setState(() {
+      _isLoading = !isNotification;
+      _isNotifying = isNotification;
+      _result = '';
+    });
+
+    // Buscar datos completos del residente seleccionado
+    final residentData = widget.state.residentsList.firstWhere((r) => r['uid'] == _selectedResidentUid);
+
+    final result = await widget.state.notifyOrLogManual(
+      residentUid: residentData['uid'],
+      residentName: residentData['nombre'],
+      torre: residentData['torre'],
+      numero: residentData['numero'],
+      visitorName: isNotification ? _visitorNameCtrl.text.trim() : null,
+    );
+
+    if (result['status'] == 'notificando') {
+      _updateUI(result);
+      _notificationSub?.cancel();
+      _notificationSub = FirebaseFirestore.instance
+          .collection('notificaciones_visita')
+          .doc(result['docId'])
+          .snapshots()
+          .listen(_onNotificationUpdate);
+    } else {
+      _updateUI(result);
+      setState(() => _isNotifying = false);
+    }
+  }
+
+  void _onNotificationUpdate(DocumentSnapshot snapshot) {
+    if (!snapshot.exists) return;
+    final data = snapshot.data() as Map<String, dynamic>;
+    final status = data['status'];
+
+    if (status == 'aprobada') {
+      _updateUI({'status': 'ok', 'message': 'VISITA APROBADA'});
+      setState(() => _isNotifying = false);
+      _notificationSub?.cancel();
+    } else if (status == 'rechazada') {
+      _updateUI({'status': 'error', 'message': 'VISITA RECHAZADA'});
+      setState(() => _isNotifying = false);
+      _notificationSub?.cancel();
+    }
+  }
+
+  void _updateUI(Map<String, dynamic> result) {
+    if (mounted) {
+      setState(() {
+        _result = result['message'];
+        _isSuccess = result['status'] == 'ok' || result['status'] == 'notificando';
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text('Acceso Peatonal', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.directions_walk),
-            title: const Text('Abrir Puerta Principal'),
-            trailing: const Icon(Icons.key),
-            onTap: () => _open(context, 'Puerta Principal'),
+    // Leer configuración de módulos
+    final unannouncedEnabled = widget.state.condoConfig['unannouncedVisitsEnabled'] ?? true;
+    final hasTowers = widget.state.towers.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Búsqueda de Residente', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 16),
+
+          // 1. Dropdown de Torres (Solo si hay torres)
+          if (hasTowers)
+            DropdownButtonFormField<String>(
+              value: _selectedTower,
+              decoration: const InputDecoration(labelText: 'Seleccionar Torre', border: OutlineInputBorder()),
+              items: widget.state.towers.map((t) => DropdownMenuItem(value: t, child: Text('Torre $t'))).toList(),
+              onChanged: (val) {
+                setState(() {
+                  _selectedTower = val;
+                  _selectedResidentUid = null; // Reiniciar residente al cambiar torre
+                });
+              },
+            ),
+          
+          if (hasTowers) const SizedBox(height: 16),
+
+          // 2. Dropdown de Residentes (Filtrado)
+          DropdownButtonFormField<String>(
+            value: _selectedResidentUid,
+            decoration: const InputDecoration(labelText: 'Seleccionar Unidad/Residente', border: OutlineInputBorder()),
+            hint: const Text('Busca por número...'),
+            isExpanded: true,
+            items: _getFilteredResidents().map((r) {
+              return DropdownMenuItem<String>(
+                value: r['uid'],
+                child: Text('${r['fullUnit']} - ${r['nombre']}', overflow: TextOverflow.ellipsis),
+              );
+            }).toList(),
+            onChanged: (val) => setState(() => _selectedResidentUid = val),
           ),
-        ),
-        const SizedBox(height: 16),
-        Text('Acceso Vehicular', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.directions_car),
-            title: const Text('Abrir Barrera Entrada'),
-            trailing: const Icon(Icons.key),
-            onTap: () => _open(context, 'Barrera Entrada'),
+
+          // 3. Campo de Visitante (Solo si está habilitado el módulo)
+          if (unannouncedEnabled) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _visitorNameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Nombre del Visitante', 
+                prefixIcon: Icon(Icons.person),
+                border: OutlineInputBorder()
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: (_isLoading || _isNotifying) ? null : () => _processAction(isNotification: true),
+              icon: _isNotifying
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.notifications_active),
+              label: Text(_isNotifying ? 'Esperando respuesta...' : 'Notificar Visita'),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+            ),
+          ],
+
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: (_isLoading || _isNotifying) ? null : () => _processAction(isNotification: false),
+            icon: const Icon(Icons.check),
+            label: const Text('Registrar Acceso Manual (Sin aviso)'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
           ),
-        ),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.directions_car),
-            title: const Text('Abrir Barrera Salida'),
-            trailing: const Icon(Icons.key),
-            onTap: () => _open(context, 'Barrera Salida'),
-          ),
-        ),
-      ],
+
+          const SizedBox(height: 24),
+          if (_result.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _isSuccess ? Colors.green.shade100 : Colors.red.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                _result,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: _isSuccess ? Colors.green.shade900 : Colors.red.shade900,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            )
+        ],
+      ),
     );
   }
 }

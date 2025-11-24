@@ -1,4 +1,5 @@
 import 'package:accesscontrol/admin/admin_shell.dart';
+import 'package:accesscontrol/admin/main_admin.dart';
 import 'package:accesscontrol/auth/register_admin_page.dart';
 import 'package:accesscontrol/auth/register_guard_page.dart'; // <-- 1. IMPORTA LA NUEVA PÁGINA
 import 'package:accesscontrol/auth/register_resident_page.dart';
@@ -54,9 +55,10 @@ class _LoginPageState extends State<LoginPage> {
           .get();
 
       if (adminDoc.exists){
+        await widget.appState.adminState.loadAdminData();
         if(!mounted) return;
         Navigator.of(context).pushReplacement(MaterialPageRoute(
-          builder: (_) => AdminShell(appState: widget.appState)
+          builder: (_) => AdminApp(appState: widget.appState)
         ));
         return;
       }
@@ -90,7 +92,6 @@ class _LoginPageState extends State<LoginPage> {
       if (guardQuery.docs.isNotEmpty){
         if (!mounted) return;
         final realGuardState = GuardState(uid: uid);
-
         await realGuardState.init();
 
         if (!mounted) return;

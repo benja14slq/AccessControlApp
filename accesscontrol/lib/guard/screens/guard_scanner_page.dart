@@ -13,8 +13,16 @@ class _GuardScannerPageState extends State<GuardScannerPage> {
   final MobileScannerController _scannerController = MobileScannerController(
     detectionSpeed: DetectionSpeed.normal,
     facing: CameraFacing.back,
+    formats: [BarcodeFormat.qrCode]
   );
   bool _isScanCompleted = false;
+
+  @override
+  void dispose(){
+    _scannerController.dispose();
+    super.dispose();
+  }
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(

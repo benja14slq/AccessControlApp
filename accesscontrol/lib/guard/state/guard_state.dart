@@ -1,26 +1,35 @@
 import 'dart:async';
-import 'package:accesscontrol/shared/models.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'package:accesscontrol/shared/api_constants.dart';
+import 'package:accesscontrol/shared/models.dart'; // Asegúrate de tener este import
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
-class GuardState extends ChangeNotifier{
+class GuardState extends ChangeNotifier {
   final String uid;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+
   late final DocumentReference _guardDocRef;
-  late String _adminUid;
-  late String _guardFullName;
+  
+  String? _adminUid; 
+  String? _guardFullName;
 
   final List<StreamSubscription> _subscriptions = [];
 
   List<AccessEvent> events = [];
+  
+  List<Map<String, dynamic>> residentsList = []; 
+  List<String> towers = [];
+  
+  Map<String, dynamic> condoConfig = {};
   bool isLoading = true;
 
-  String get adminUid => _adminUid;
+  // Getter seguro
+  String get adminUid => _adminUid ?? '';
 
   GuardState({required this.uid});
 
@@ -32,109 +41,93 @@ class GuardState extends ChangeNotifier{
           .where('uid', isEqualTo: uid)
           .limit(1)
           .get();
-      
+
       if (query.docs.isEmpty) {
-        throw Exception("Error Crítico: No se encontró el documento del Guardia para el UID: $uid");
+         throw Exception('Perfil de guardia no encontrado para el UID: $uid');
       }
-      _guardDocRef = query.docs.first.reference;
-      final data = query.docs.first.data();
       
-      _adminUid = data['adminUid'];
-      _guardFullName = '${data['nombre']} ${data['apellido']}';
+      // Obtenemos el documento real
+      final guardDoc = query.docs.first;
+      final guardData = guardDoc.data(); 
       
-      await _loadEvents();
+      _guardDocRef = guardDoc.reference; // Guardamos la referencia correcta
+      _adminUid = guardData['adminUid']; // Ahora sí tenemos el adminUid
+      _guardFullName = '${guardData['nombre']} ${guardData['apellido']}';
+
+      // Ahora que _adminUid NO es nulo, cargamos el resto
+      if (_adminUid != null) {
+        _loadEvents();
+        _loadConfig();
+        await _loadResidentsForDropdowns(); 
+      }
 
     } catch (e) {
-      print(e.toString());
+      print('Error Crítico en GuardState init: $e');
     } finally {
       isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<void> _loadEvents() {
-    final completer = Completer<void>();
-    final sub = _db.collection('Eventos')
-        .where('adminUid', isEqualTo: _adminUid)
-        .orderBy('timestamp', descending: true)
-        .limit(100)
-        .snapshots()
-        .listen((snapshot) {
-      
-      if (!completer.isCompleted) completer.complete();
-      events = snapshot.docs.map((doc) {
-        final data = doc.data();
-        return AccessEvent(
-          description: data['description'],
-          timestamp: (data['timestamp'] as Timestamp).toDate(),
-        );
-      }).toList();
-      notifyListeners();
-      
-    }, onError: (e) {
-      if (!completer.isCompleted) completer.completeError(e);
-      print("Error cargando bitácora: $e");
-    });
-
-    _subscriptions.add(sub);
-    return completer.future;
-  }
-
-  Future<String> verifyPass(String code) async {
+  Future<void> _loadResidentsForDropdowns() async {
+    if (_adminUid == null) return;
     try {
-      final query = await _db.collection('Visitas')
-          .where('code', isEqualTo: code.toUpperCase())
-          .where('adminUid', isEqualTo: _adminUid) 
-          .where('status', isEqualTo: 'programada')
-          .limit(1)
+      final snapshot = await _db.collection('Residentes')
+          .where('adminUid', isEqualTo: _adminUid)
           .get();
+      
+      residentsList = snapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'uid': data['uid'], // Auth UID
+          'nombre': '${data['nombre']} ${data['apellido']}',
+          'torre': data['torre'] ?? '',
+          'numero': data['numero'] ?? '',
+          'fullUnit': '${data['torre'] != null ? "${data['torre']} - " : ""}${data['numero']}'
+        };
+      }).toList();
 
-      if (query.docs.isEmpty) {
-        throw Exception('CÓDIGO INVÁLIDO O EXPIRADO');
-      }
-
-      final visitDoc = query.docs.first;
-      final data = visitDoc.data();
-
-      final String residentUid = data['residentUid'];
-      String residentName = 'N/A';
-      String? residentTower;
-      String? residentUnit;
-      try {
-        final residentDoc = await _db.collection('Residentes').doc(residentUid).get();
-        if (residentDoc.exists) {
-          final resData = residentDoc.data()!;
-          residentName = '${resData['nombre']} ${resData['apellido']}';
-          residentTower = resData['torre'];
-          residentUnit = resData['numero'];
+      final towerSet = <String>{};
+      for (var r in residentsList) {
+        if (r['torre'].toString().isNotEmpty) {
+          towerSet.add(r['torre']);
         }
-      } catch (e) { /* Ignorar error si no se encuentra el residente */ }
-
-      await visitDoc.reference.update({
-        'status': 'autorizada',
-        'checkedByGuardUid': uid,
-      });
-      
-      final description = 'Ingreso autorizado: ${data['visitorName']} (Pase: $code)';
-      await _logEvent(
-        description: description, 
-        status: 'autorizada_qr',
-        residentUid: residentUid,
-        residentName: residentName,
-        residentTower: residentTower,
-        residentUnit: residentUnit,
-      );
-      
-      return 'PASE AUTORIZADO:\n${data['visitorName']}';
-      
+      }
+      towers = towerSet.toList()..sort();
+      notifyListeners();
     } catch (e) {
-      final description = 'Ingreso rechazado. Código: $code';
-      await _logEvent(description: description, status: 'rechazada');
-      return e.toString().contains('Exception:') ? e.toString().split(': ')[1] : e.toString();
+      print("Error cargando residentes: $e");
     }
   }
 
+  void _loadEvents() {
+    if (_adminUid == null) return;
+    final sub = _db.collection('Eventos')
+        .where('adminUid', isEqualTo: _adminUid)
+        .orderBy('timestamp', descending: true)
+        .limit(50)
+        .snapshots()
+        .listen((snapshot) {
+          events = snapshot.docs.map((doc) => AccessEvent.fromFirestore(doc)).toList();
+          notifyListeners();
+        });
+    _subscriptions.add(sub);
+  }
+
+  void _loadConfig() {
+    if (_adminUid == null) return;
+    final sub = _db.collection('Administradores').doc(_adminUid).snapshots().listen((doc) {
+      if (doc.exists) {
+        condoConfig = (doc.data() as Map<String, dynamic>)['configuracion'] ?? {};
+        notifyListeners();
+      }
+    });
+    _subscriptions.add(sub);
+  }
+
   Future<Map<String, dynamic>> verifyFaceByImage() async {
+    if (_adminUid == null) throw Exception("Error de inicialización: Intenta recargar la app.");
+
     try {
       final ImagePicker picker = ImagePicker();
       final XFile? photo = await picker.pickImage(
@@ -144,9 +137,7 @@ class GuardState extends ChangeNotifier{
         maxWidth: 1080,
       );
 
-      if (photo == null) {
-        throw Exception('Captura cancelada.');
-      }
+      if (photo == null) throw Exception('Captura cancelada.');
 
       final bytes = await File(photo.path).readAsBytes();
       final String base64Image = base64Encode(bytes);
@@ -155,21 +146,16 @@ class GuardState extends ChangeNotifier{
       
       final response = await http.post(
         verifyUrl,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-        },
-        body: jsonEncode({
-          'imageBase64': base64Image,
-        }),
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+        body: jsonEncode({ 'imageBase64': base64Image }),
       );
 
       if (response.statusCode != 200) {
-        throw Exception('Error del servidor: ${response.body}');
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['error'] ?? 'Error del servidor');
       }
 
       final data = jsonDecode(response.body);
-      
       if (data['match'] == false || data['faceId'] == null) {
         throw Exception('ROSTRO NO RECONOCIDO.');
       }
@@ -177,21 +163,21 @@ class GuardState extends ChangeNotifier{
       final String faceId = data['faceId'];
       final double similarity = data['similarity'];
 
+      // Búsqueda en Firestore
       final residentQuery = await _db.collection('Residentes')
-          .where('adminUid', isEqualTo: _adminUid) 
+          .where('adminUid', isEqualTo: _adminUid)
           .where('rekognitionFaceId', isEqualTo: faceId)
           .limit(1)
           .get();
 
       DocumentSnapshot? docEncontrado;
       String tipoMiembro = "Residente";
-      DocumentReference? residenteDocRef;
+      DocumentReference? residentRef;
 
       if (residentQuery.docs.isNotEmpty) {
         docEncontrado = residentQuery.docs.first;
-        residenteDocRef = docEncontrado.reference;
+        residentRef = docEncontrado.reference;
       } else {
-        // 2. Si no lo encuentra, busca en las sub-colecciones 'GrupoFamiliar'
         final familyQuery = await _db.collectionGroup('GrupoFamiliar')
             .where('rekognitionFaceId', isEqualTo: faceId)
             .limit(1)
@@ -200,24 +186,26 @@ class GuardState extends ChangeNotifier{
         if (familyQuery.docs.isNotEmpty) {
           docEncontrado = familyQuery.docs.first;
           tipoMiembro = "Grupo Familiar";
-          residenteDocRef = docEncontrado.reference.parent.parent;
+          residentRef = docEncontrado.reference.parent.parent;
         }
       }
 
-      if (docEncontrado == null || residenteDocRef == null) {
-        throw Exception('Rostro reconocido, pero no asociado a este condominio.');
+      if (docEncontrado == null || residentRef == null) {
+        throw Exception('Rostro no asociado a residente.');
       }
 
       final personData = docEncontrado.data() as Map<String, dynamic>;
       final String personName = '${personData['nombre']} ${personData['apellido']}';
 
-      final residentDoc = await residenteDocRef.get();
+      final residentDoc = await residentRef.get();
+      if (!residentDoc.exists) throw Exception('Residente principal no encontrado');
+
       final residentData = residentDoc.data() as Map<String, dynamic>;
       final String unit = residentData['torre'] != null
           ? 'Torre ${residentData['torre']} - ${residentData['numero']}'
           : 'Nº ${residentData['numero']}';
 
-      final description = 'Ingreso facial: $personName ($tipoMiembro)';
+      final description = 'Ingreso facial: $personName ($tipoMiembro)\nUnidad: $unit (Sim: ${similarity.toStringAsFixed(1)}%)';
       
       await _logEvent(
         description: description, 
@@ -243,13 +231,191 @@ class GuardState extends ChangeNotifier{
     }
   }
 
-  // --- 4. LÓGICA DE ACCESO MANUAL ---
-  Future<void> triggerManualAccess(String gateName) async {
-    final description = 'Apertura manual: $gateName (Por: $_guardFullName)';
-    await _logEvent(description: description, status: 'manual');
+  Future<String> verifyPass(String code) async {
+    if (_adminUid == null) throw Exception("Error de inicialización");
+    
+    try {
+      final query = await _db.collection('Visitas')
+          .where('adminUid', isEqualTo: _adminUid)
+          .where('code', isEqualTo: code)
+          .where('status', isEqualTo: 'programada')
+          .where('expiresAt', isGreaterThan: Timestamp.now())
+          .limit(1)
+          .get();
+
+      if (query.docs.isEmpty) {
+        throw Exception('CÓDIGO INVÁLIDO O EXPIRADO');
+      }
+
+      final visitDoc = query.docs.first;
+      final visitData = visitDoc.data();
+      
+      final String residentUid = visitData['residentUid'];
+      String residentName = 'Desconocido';
+      String? residentTower;
+      String? residentUnit;
+
+      final residentLocal = residentsList.firstWhere(
+        (r) => r['uid'] == residentUid, 
+        orElse: () => {}
+      );
+
+      if (residentLocal.isNotEmpty) {
+         residentName = residentLocal['nombre'];
+         residentTower = residentLocal['torre']?.toString();
+         residentUnit = residentLocal['numero']?.toString();
+      }
+
+      await visitDoc.reference.update({
+        'status': 'autorizada',
+        'checkedByGuardUid': uid,
+        'checkedAt': FieldValue.serverTimestamp(),
+      });
+      
+      final description = 'Ingreso QR: ${visitData['visitorName']} (Pase: $code)';
+      await _logEvent(
+        description: description, 
+        status: 'autorizada_qr',
+        residentUid: residentUid,
+        residentName: residentName,
+        residentTower: residentTower,
+        residentUnit: residentUnit,
+      );
+      
+      return 'PASE AUTORIZADO:\n${visitData['visitorName']}';
+      
+    } catch (e) {
+      final description = 'QR rechazado: $code';
+      await _logEvent(description: description, status: 'rechazada_qr');
+      if (e.toString().contains('Exception:')) throw e;
+      throw Exception('Error al verificar: $e');
+    }
   }
 
-  // --- 5. FUNCIÓN INTERNA PARA BITÁCORA ---
+  // --- LPR (PATENTE) ---
+  Future<Map<String, dynamic>> verifyPlateByLPR() async {
+    if (_adminUid == null) throw Exception("Error de inicialización");
+    String recognizedPlate = '';
+    
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? photo = await picker.pickImage(source: ImageSource.camera);
+      if (photo == null) throw Exception('Captura cancelada.');
+
+      final inputImage = InputImage.fromFilePath(photo.path);
+      final textRecognizer = TextRecognizer();
+      final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
+
+      String bestMatch = '';
+      for (TextBlock block in recognizedText.blocks) {
+        String text = block.text.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+        if (text.length == 6) {
+          bestMatch = text;
+          break;
+        }
+      }
+      textRecognizer.close();
+
+      if (bestMatch.isEmpty) throw Exception('No se pudo leer una patente.');
+      recognizedPlate = bestMatch;
+
+      // Búsqueda
+      final vehicleQuery = await _db.collectionGroup('Vehiculos')
+          .where('adminUid', isEqualTo: _adminUid)
+          .where('plate', isEqualTo: recognizedPlate)
+          .limit(1)
+          .get();
+
+      if (vehicleQuery.docs.isEmpty) throw Exception('PATENTE NO REGISTRADA: $recognizedPlate');
+
+      final vehicleDoc = vehicleQuery.docs.first;
+      final residentRef = vehicleDoc.reference.parent.parent;
+      
+      if (residentRef == null) throw Exception('Vehículo sin residente.');
+      final residentDoc = await residentRef.get();
+      final residentData = residentDoc.data() as Map<String, dynamic>;
+
+      final String residentName = '${residentData['nombre']} ${residentData['apellido']}';
+      final String unit = residentData['torre'] != null
+          ? 'Torre ${residentData['torre']} - ${residentData['numero']}'
+          : 'Nº ${residentData['numero']}';
+
+      await _logEvent(
+        description: 'Ingreso LPR: $residentName (Patente: $recognizedPlate)', 
+        status: 'autorizada_lpr',
+        residentUid: residentData['uid'],
+        residentName: residentName,
+        residentTower: residentData['torre'],
+        residentUnit: residentData['numero'],
+      );
+      
+      return {
+        'success': true,
+        'message': 'ACCESO AUTORIZADO:\n$residentName\n$unit (Patente: $recognizedPlate)'
+      };
+
+    } catch (e) {
+      await _logEvent(description: 'Rechazo LPR: ${e.toString()} ($recognizedPlate)', status: 'rechazada_lpr');
+      return {
+        'success': false,
+        'message': e.toString().contains('Exception:') ? e.toString().split(': ')[1] : e.toString()
+      };
+    }
+  }
+
+  // --- ACCESO MANUAL / NOTIFICACIÓN (MODIFICADO PARA DROPDOWN) ---
+  Future<Map<String, dynamic>> notifyOrLogManual({
+    required String residentUid,
+    required String residentName,
+    String? visitorName,
+    String? torre,
+    String? numero,
+  }) async {
+    if (_adminUid == null) return {'status': 'error', 'message': 'Error de inicialización'};
+
+    try {
+      // SI ES NOTIFICACIÓN
+      if (visitorName != null && visitorName.isNotEmpty) {
+        final newNotification = await _db.collection('notificaciones_visita').add({
+          'adminUid': _adminUid,
+          'guardUid': uid,
+          'guardName': _guardFullName,
+          'residentUid': residentUid,
+          'residentName': residentName,
+          'visitorName': visitorName,
+          'status': 'pendiente',
+          'createdAt': FieldValue.serverTimestamp(),
+          'torre': torre,
+          'numero': numero,
+        });
+
+        return {
+          'status': 'notificando',
+          'docId': newNotification.id,
+          'message': 'Notificando a $residentName...',
+        };
+      } 
+      // SI ES REGISTRO MANUAL
+      else {
+        await _logEvent(
+          description: 'Acceso manual: $residentName', 
+          status: 'autorizada_manual',
+          residentUid: residentUid,
+          residentName: residentName,
+          residentTower: torre,
+          residentUnit: numero,
+        );
+        return {
+          'status': 'ok',
+          'message': 'ACCESO REGISTRADO:\n$residentName'
+        };
+      }
+    } catch (e) {
+       return {'status': 'error', 'message': e.toString()};
+    }
+  }
+
+  // --- LOG DE EVENTOS ---
   Future<void> _logEvent({
     required String description, 
     required String status,
@@ -258,6 +424,7 @@ class GuardState extends ChangeNotifier{
     String? residentTower,
     String? residentUnit,
   }) async {
+    if (_adminUid == null) return;
     try {
       await _db.collection('Eventos').add({
         'adminUid': _adminUid,
@@ -265,22 +432,19 @@ class GuardState extends ChangeNotifier{
         'description': description,
         'status': status,
         'timestamp': FieldValue.serverTimestamp(),
-        // --- NUEVOS CAMPOS PARA FILTROS ---
         'residentUid': residentUid,
         'residentName': residentName,
         'residentTower': residentTower,
         'residentUnit': residentUnit,
       });
     } catch (e) {
-      print("Error al guardar evento: $e");
+      print("Error log: $e");
     }
   }
 
   @override
   void dispose() {
-    for (var sub in _subscriptions) {
-      sub.cancel();
-    }
+    for (var sub in _subscriptions) sub.cancel();
     super.dispose();
   }
 }

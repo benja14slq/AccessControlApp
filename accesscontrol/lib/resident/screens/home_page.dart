@@ -6,10 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:accesscontrol/shared/models.dart';
 
 class HomePage extends StatelessWidget {
-  const HomePage({super.key, required this.state, required this.goToCreate, required this.goToVisits});
+  const HomePage({super.key, required this.state, required this.goToCreate, required this.goToVisits, required this.goToSettings,});
   final ResidentState state;
   final VoidCallback goToCreate;
   final VoidCallback goToVisits;
+  final VoidCallback goToSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +36,7 @@ class HomePage extends StatelessWidget {
                   child: ListTile(
                     title: const Text('Completa tu perfil de acceso'),
                     subtitle: const Text('Aún no registrar biometria facial.'),
-                    trailing: TextButton(onPressed: state.toggleFaceId, child: Text('Registrar ahora')),
+                    trailing: TextButton(onPressed: goToSettings, child: Text('Registrar ahora')),
                   ),
                 ),
               const SizedBox(height: 12),

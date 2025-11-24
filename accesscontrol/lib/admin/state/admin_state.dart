@@ -11,12 +11,13 @@ class AdminState extends ChangeNotifier {
   String? adminCondoName;
   String? adminCondoTypeId;
   bool isLoadingAdminData = true;
+  late DocumentReference _adminDocRef;
+  Map<String, dynamic> condoConfig = {};
   
   AdminState() {
   }
 
   Future<void> loadAdminData() async {
-    // Si ya está cargado, no lo hagas de nuevo (opcional)
     if (!isLoadingAdminData && adminUid != null) return; 
 
     isLoadingAdminData = true;
@@ -30,25 +31,40 @@ class AdminState extends ChangeNotifier {
 
       adminUid = user.uid;
 
-      final doc = await FirebaseFirestore.instance
+      _adminDocRef = FirebaseFirestore.instance
           .collection('Administradores')
-          .doc(adminUid)
-          .get();
+          .doc(adminUid);
+
+      final doc = await _adminDocRef.get();
 
       if (doc.exists) {
-        final data = doc.data()!;
+        final data = doc.data() as Map<String, dynamic>;
         
-        // --- Debug Print (puedes borrar esto después) ---
         print("Datos del admin cargados en loadAdminData: $data"); 
-        // ---------------------------------------------
         
         adminCondoName = data['nombreCondominio'];
         adminCondoTypeId = data['tipoCondominioId'];
+        condoConfig = data['configuracion'] ?? {};
       }
     } catch (e) {
       print('Error cargando datos del admin: $e');
     } finally {
       isLoadingAdminData = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateConfig(String key, bool value) async {
+    try{
+      condoConfig[key] = value;
+      notifyListeners();
+
+      await _adminDocRef.update({
+        'configuracion.$key': value
+      });
+    } catch (e) {
+      print("Error al actualizar configuración: $e");
+      condoConfig[key] = !value;
       notifyListeners();
     }
   }
