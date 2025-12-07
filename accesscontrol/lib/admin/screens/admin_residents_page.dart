@@ -112,42 +112,62 @@ class _AdminResidentsPageState extends State<AdminResidentsPage> {
     final torre = _torreCtrl.text.trim();
     final adminUid = FirebaseAuth.instance.currentUser?.uid;
 
-    // 4. Validamos los nuevos campos
     if (email.isEmpty || nombre.isEmpty || apellido.isEmpty || numero.isEmpty || (isEdificio && torre.isEmpty)) {
-      ScaffoldMessenger.of(dialogContext).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
          const SnackBar(content: Text('Por favor, completa todos los campos.'))
       );
       return;
     }
 
-    // Prepara los datos a guardar
-    final Map<String, dynamic> residentData = {
-      'adminUid': adminUid,
-      'correo': email,
-      'nombre': nombre,
-      'apellido': apellido,
-      'estado': 'Pendiente', // El estado inicial es Pendiente
-      'rol': 'Residente',
-      'createdAt': FieldValue.serverTimestamp(),
-      'numero': numero,
-      'torre': isEdificio ? torre : null, // Guarda null si no es edificio
-      'uid': null, 
-      'nombreCondominio': null,
-      'tipoCondominioId': null,
-    };
-
     try {
-      // 5. Guardamos en la colección 'Residentes'
+      final duplicateCheck = await FirebaseFirestore.instance
+          .collection('Residentes')
+          .where('correo', isEqualTo: email)
+          .limit(1) 
+          .get();
+
+      if (duplicateCheck.docs.isNotEmpty) {
+          if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Este correo ya tiene una invitación o está registrado.'),
+                    backgroundColor: Colors.orange,
+                  )
+              );
+          }
+          return; 
+      }
+      final Map<String, dynamic> residentData = {
+        'adminUid': adminUid,
+        'correo': email,
+        'nombre': nombre,
+        'apellido': apellido,
+        'estado': 'Pendiente',
+        'rol': 'Residente',
+        'createdAt': FieldValue.serverTimestamp(),
+        'numero': numero,
+        'torre': isEdificio ? torre : null,
+        'uid': null, 
+        'nombreCondominio': null,
+        'tipoCondominioId': null,
+      };
+
       await FirebaseFirestore.instance.collection('Residentes').add(residentData);
       
       if (dialogContext.mounted) {
-        Navigator.of(dialogContext).pop(); // Cierra el diálogo
+        Navigator.of(dialogContext).pop(); 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Residente invitado con éxito.'))
         );
       }
+
     } catch (e) {
-      // (Manejo de error)
+      print("Error al invitar: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'))
+        );
+      }
     }
   }
 

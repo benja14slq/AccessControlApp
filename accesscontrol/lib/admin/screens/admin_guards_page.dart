@@ -70,7 +70,6 @@ class _AdminGuardsPageState extends State<AdminGuardsPage> {
     );
   }
 
-  // 3. Nueva función para crear la invitación en la colección 'Guardias'
   Future<void> _createPendingGuard(BuildContext dialogContext) async {
     final email = _emailCtrl.text.trim();
     final nombre = _nombreCtrl.text.trim();
@@ -79,44 +78,78 @@ class _AdminGuardsPageState extends State<AdminGuardsPage> {
     final adminCondoName = widget.appState.adminState.adminCondoName;
 
     if (email.isEmpty || nombre.isEmpty || apellido.isEmpty) {
-      ScaffoldMessenger.of(dialogContext).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
          const SnackBar(content: Text('Por favor, completa todos los campos.'))
       );
       return;
     }
 
-    // Datos a guardar
-    final Map<String, dynamic> guardData = {
-      'adminUid': adminUid,
-      'correo': email,
-      'nombre': nombre,
-      'apellido': apellido,
-      'estado': 'Pendiente',
-      'rol': 'Guardia',
-      'createdAt': FieldValue.serverTimestamp(),
-      'nombreCondominio': adminCondoName, // Nombre del condominio del admin
-      'uid': null, // Se llenará cuando el guardia se registre
-    };
-
     try {
-      // 5. Guardamos en la nueva colección 'Guardias'
+      final duplicateCheck = await FirebaseFirestore.instance
+          .collection('Guardias')
+          .where('correo', isEqualTo: email)
+          .limit(1)
+          .get();
+
+      if (duplicateCheck.docs.isNotEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Este correo ya está registrado como guardia.'),
+                  backgroundColor: Colors.orange,
+                )
+            );
+          }
+          return;
+      }
+
+      final Map<String, dynamic> guardData = {
+        'adminUid': adminUid,
+        'correo': email,
+        'nombre': nombre,
+        'apellido': apellido,
+        'estado': 'Pendiente',
+        'rol': 'Guardia',
+        'createdAt': FieldValue.serverTimestamp(),
+        'nombreCondominio': adminCondoName,
+        'uid': null, 
+      };
+
       await FirebaseFirestore.instance.collection('Guardias').add(guardData);
       
       if (dialogContext.mounted) {
-        Navigator.of(dialogContext).pop(); // Cierra el diálogo
+        Navigator.of(dialogContext).pop(); 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Guardia invitado con éxito.'))
         );
       }
     } catch (e) {
-      if (dialogContext.mounted) {
-        ScaffoldMessenger.of(dialogContext).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error al invitar guardia: $e'))
         );
       }
     }
   }
 
+  Future<void> _deleteGuard(String docId) async {
+    final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+            title: const Text('¿Despedir Guardia?'),
+            content: const Text('Esto eliminará su acceso al sistema permanentemente.'),
+            actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+                FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
+            ],
+        )
+    );
+
+    if (confirm == true) {
+        await FirebaseFirestore.instance.collection('Guardias').doc(docId).delete();
+        // Opcional: También podrías deshabilitar su usuario en Auth si usas Cloud Functions
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -159,11 +192,16 @@ class _AdminGuardsPageState extends State<AdminGuardsPage> {
                 child: ListTile(
                   title: Text(title),
                   subtitle: Text(data['correo'] ?? 'Sin email'),
-                  trailing: Chip(
-                    label: Text(estado, style: const TextStyle(fontSize: 12)),
-                    backgroundColor: estado == 'Registrado' 
-                        ? Colors.green.shade50 
-                        : Colors.grey.shade200,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Chip(label: Text(estado)),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteGuard(guards[i].id),
+                      )
+                    ],
                   ),
                 ),
               );

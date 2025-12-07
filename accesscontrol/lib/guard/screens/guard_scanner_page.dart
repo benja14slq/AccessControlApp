@@ -13,6 +13,7 @@ class _GuardScannerPageState extends State<GuardScannerPage> {
   final MobileScannerController _scannerController = MobileScannerController(
     detectionSpeed: DetectionSpeed.normal,
     facing: CameraFacing.back,
+    cameraResolution: const Size(1280, 720),
     formats: [BarcodeFormat.qrCode]
   );
   bool _isScanCompleted = false;
@@ -39,6 +40,7 @@ class _GuardScannerPageState extends State<GuardScannerPage> {
                 final String code = barcodes.first.rawValue ?? "";
                 if (code.isNotEmpty){
                   setState(() => _isScanCompleted = true);
+                  _scannerController.stop();
                   Navigator.of(context).pop(code);
                 }
               }

@@ -211,16 +211,6 @@ class _LoginPageState extends State<LoginPage> {
               },
               child: const Text('Activar mi cuenta de Guardia'),
             ),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: _isLoading ? null : () { 
-                Navigator.of(context).push(MaterialPageRoute(
-                  // Llama a la nueva VisitPassPage() sin parámetros
-                  builder: (_) => const VisitPassPage(), 
-                ));
-              },
-              child: const Text('Soy Visita (Ingresar código)'),
-            ),
           ],
         ),
       ),

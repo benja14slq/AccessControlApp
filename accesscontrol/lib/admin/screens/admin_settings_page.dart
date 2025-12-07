@@ -42,9 +42,19 @@ class AdminSettingsPage extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text('Mi Cuenta', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            const SizedBox(height: 8),
+            UserAccountsDrawerHeader(
+                decoration: BoxDecoration(color: Theme.of(context).primaryColor),
+                accountName: Text(
+                    "Administrador", 
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
+                ),
+                accountEmail: Text(adminState.adminCondoName ?? 'Cargando condominio...'),
+                currentAccountPicture: const CircleAvatar(
+                    backgroundColor: Colors.white,
+                    child: Icon(Icons.admin_panel_settings, size: 30),
+                ),
+            ),
+            const SizedBox(height: 16),
             Text('Módulos del Condominio', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Card(

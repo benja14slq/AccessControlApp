@@ -107,22 +107,19 @@ class _GuardVerifyPageState extends State<GuardVerifyPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            controller: _codeCtrl,
-            textCapitalization: TextCapitalization.characters,
-            decoration: const InputDecoration(labelText: 'Ingresar código de pase'),
-            onSubmitted: (_) => _verify(),
-            enabled: !_isLoading,
-          ),
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: _isLoading ? null : () => _verify(), 
-            icon: _isLoading
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.check_circle_outline),
-            label: const Text('Verificar Pase'),
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            onPressed: _isLoading ? null : _openScanner,
+            icon: const Icon(Icons.qr_code_scanner, size: 28), 
+            label: const Text('Escanear Pase QR', style: TextStyle(fontSize: 18)),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(60),
+              backgroundColor: Colors.indigo,
+            ),
           ),
+          const SizedBox(height: 24),
+          const Text("Otras verificaciones:", style: TextStyle(color: Colors.grey)),
+          const SizedBox(height: 8),
           if (lprEnabled) ...[
             const SizedBox(height: 12),
             OutlinedButton.icon(
@@ -160,14 +157,6 @@ class _GuardVerifyPageState extends State<GuardVerifyPage> {
                 ),
               ),
             ),
-          
-          const Spacer(),
-          OutlinedButton.icon(
-            onPressed: _isLoading ? null : _openScanner, 
-            icon: const Icon(Icons.qr_code_scanner), 
-            label: const Text('Escanear QR (Pase de visita)'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-          ),
         ],
       ),
     );

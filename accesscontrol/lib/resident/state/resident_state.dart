@@ -285,7 +285,7 @@ class ResidentState extends ChangeNotifier {
     }
   }
 
-  Future<void> createVisit({
+  Future<String> createVisit({
     required String visitorName,
     required String visitorLastName,
     required String? rut,
@@ -294,6 +294,7 @@ class ResidentState extends ChangeNotifier {
     required DateTime scheduledAt,
   }) async {
     try {
+      final newCode = mkCode();
       await _db.collection('Visitas').add({
         'adminUid': _adminUid, // Usa el _adminUid que ya cargamos
         'residentUid': uid,
@@ -302,11 +303,12 @@ class ResidentState extends ChangeNotifier {
         'visitorId': rut, // Campo renombrado
         'phone': phone,
         'plate': plate,
-        'code': mkCode(), // Función global que ya tienes
+        'code': newCode,
         'status': 'programada',
         'createdAt': FieldValue.serverTimestamp(),
         'scheduledAt': Timestamp.fromDate(scheduledAt), // Renombrado
       });
+      return newCode;
     } catch (e) {
       print("Error al crear visita: $e");
       rethrow; // Lanza el error para que la UI lo atrape

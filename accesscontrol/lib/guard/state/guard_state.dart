@@ -30,6 +30,7 @@ class GuardState extends ChangeNotifier {
 
   // Getter seguro
   String get adminUid => _adminUid ?? '';
+  String get guardFullName => _guardFullName ?? 'Guardia';
 
   GuardState({required this.uid});
 
@@ -234,17 +235,37 @@ class GuardState extends ChangeNotifier {
   Future<String> verifyPass(String code) async {
     if (_adminUid == null) throw Exception("Error de inicialización");
     
+    print("--- VERIFICANDO PASE ---");
+    print("Guardia AdminUID: $_adminUid");
+    print("Código escaneado: $code");
+
     try {
       final query = await _db.collection('Visitas')
           .where('adminUid', isEqualTo: _adminUid)
           .where('code', isEqualTo: code)
           .where('status', isEqualTo: 'programada')
-          .where('expiresAt', isGreaterThan: Timestamp.now())
+          .where('scheduledAt', isGreaterThan: Timestamp.now())
           .limit(1)
           .get();
 
       if (query.docs.isEmpty) {
-        throw Exception('CÓDIGO INVÁLIDO O EXPIRADO');
+        // Si entra aquí, el pase NO existe con esos filtros.
+        // Vamos a hacer una búsqueda solo por código para ver qué pasa
+        final debugQuery = await _db.collection('Visitas').where('code', isEqualTo: code).get();
+        if (debugQuery.docs.isNotEmpty) {
+            final doc = debugQuery.docs.first.data();
+            print("ERROR LÓGICO: El pase existe pero no coincide.");
+            print("  - AdminUID del pase: ${doc['adminUid']}");
+            print("  - Status del pase: ${doc['status']}");
+            print("  - Expira: ${doc['scheduledAt']}");
+            
+            if (doc['adminUid'] != _adminUid) throw Exception('Este pase pertenece a otro condominio.');
+            if (doc['status'] != 'programada') throw Exception('Este pase ya fue utilizado o rechazado.');
+            // Si llegamos aquí, está vencido
+             throw Exception('El pase ha expirado.');
+        }
+        
+        throw Exception('CÓDIGO NO ENCONTRADO');
       }
 
       final visitDoc = query.docs.first;

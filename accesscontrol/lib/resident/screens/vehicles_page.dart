@@ -55,7 +55,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
         const SizedBox(height: 8),
         TextField(controller: _plateCtrl, textCapitalization: TextCapitalization.characters, decoration: const InputDecoration(labelText: 'Patente')),
         const SizedBox(height: 8),
-        TextField(controller: _aliasCtrl, decoration: const InputDecoration(labelText: 'Alias (opcional)')),
+        TextField(controller: _aliasCtrl, decoration: const InputDecoration(labelText: 'Descripción (Marca/Modelo/Color)')),
         const SizedBox(height: 8),
         FilledButton.icon(
           onPressed: () {

@@ -114,96 +114,101 @@ class _GuardManualPageState extends State<GuardManualPage> {
     final unannouncedEnabled = widget.state.condoConfig['unannouncedVisitsEnabled'] ?? true;
     final hasTowers = widget.state.towers.isNotEmpty;
 
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Búsqueda de Residente', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 16),
+    // SOLUCIÓN: Envolver en SingleChildScrollView
+    return SingleChildScrollView(
+      // Opcional: Para que el teclado se oculte al hacer scroll
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag, 
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Búsqueda de Residente', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 16),
 
-          // 1. Dropdown de Torres (Solo si hay torres)
-          if (hasTowers)
+            // 1. Dropdown de Torres (Solo si hay torres)
+            if (hasTowers)
+              DropdownButtonFormField<String>(
+                value: _selectedTower,
+                decoration: const InputDecoration(labelText: 'Seleccionar Torre', border: OutlineInputBorder()),
+                items: widget.state.towers.map((t) => DropdownMenuItem(value: t, child: Text('Torre $t'))).toList(),
+                onChanged: (val) {
+                  setState(() {
+                    _selectedTower = val;
+                    _selectedResidentUid = null; 
+                  });
+                },
+              ),
+            
+            if (hasTowers) const SizedBox(height: 16),
+
+            // 2. Dropdown de Residentes (Filtrado)
             DropdownButtonFormField<String>(
-              value: _selectedTower,
-              decoration: const InputDecoration(labelText: 'Seleccionar Torre', border: OutlineInputBorder()),
-              items: widget.state.towers.map((t) => DropdownMenuItem(value: t, child: Text('Torre $t'))).toList(),
-              onChanged: (val) {
-                setState(() {
-                  _selectedTower = val;
-                  _selectedResidentUid = null; // Reiniciar residente al cambiar torre
-                });
-              },
+              value: _selectedResidentUid,
+              decoration: const InputDecoration(labelText: 'Seleccionar Unidad/Residente', border: OutlineInputBorder()),
+              hint: const Text('Busca por número...'),
+              isExpanded: true,
+              items: _getFilteredResidents().map((r) {
+                return DropdownMenuItem<String>(
+                  value: r['uid'],
+                  child: Text('${r['fullUnit']} - ${r['nombre']}', overflow: TextOverflow.ellipsis),
+                );
+              }).toList(),
+              onChanged: (val) => setState(() => _selectedResidentUid = val),
             ),
-          
-          if (hasTowers) const SizedBox(height: 16),
 
-          // 2. Dropdown de Residentes (Filtrado)
-          DropdownButtonFormField<String>(
-            value: _selectedResidentUid,
-            decoration: const InputDecoration(labelText: 'Seleccionar Unidad/Residente', border: OutlineInputBorder()),
-            hint: const Text('Busca por número...'),
-            isExpanded: true,
-            items: _getFilteredResidents().map((r) {
-              return DropdownMenuItem<String>(
-                value: r['uid'],
-                child: Text('${r['fullUnit']} - ${r['nombre']}', overflow: TextOverflow.ellipsis),
-              );
-            }).toList(),
-            onChanged: (val) => setState(() => _selectedResidentUid = val),
-          ),
-
-          // 3. Campo de Visitante (Solo si está habilitado el módulo)
-          if (unannouncedEnabled) ...[
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _visitorNameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Nombre del Visitante', 
-                prefixIcon: Icon(Icons.person),
-                border: OutlineInputBorder()
-              ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: (_isLoading || _isNotifying) ? null : () => _processAction(isNotification: true),
-              icon: _isNotifying
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.notifications_active),
-              label: Text(_isNotifying ? 'Esperando respuesta...' : 'Notificar Visita'),
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-            ),
-          ],
-
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: (_isLoading || _isNotifying) ? null : () => _processAction(isNotification: false),
-            icon: const Icon(Icons.check),
-            label: const Text('Registrar Acceso Manual (Sin aviso)'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-          ),
-
-          const SizedBox(height: 24),
-          if (_result.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: _isSuccess ? Colors.green.shade100 : Colors.red.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                _result,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: _isSuccess ? Colors.green.shade900 : Colors.red.shade900,
-                  fontWeight: FontWeight.bold,
+            // 3. Campo de Visitante
+            if (unannouncedEnabled) ...[
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _visitorNameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Nombre del Visitante', 
+                  prefixIcon: Icon(Icons.person),
+                  border: OutlineInputBorder()
                 ),
               ),
-            )
-        ],
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: (_isLoading || _isNotifying) ? null : () => _processAction(isNotification: true),
+                icon: _isNotifying
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.notifications_active),
+                label: Text(_isNotifying ? 'Esperando respuesta...' : 'Notificar Visita'),
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+              ),
+            ],
+
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: (_isLoading || _isNotifying) ? null : () => _processAction(isNotification: false),
+              icon: const Icon(Icons.check),
+              label: const Text('Registrar Acceso Manual (Sin aviso)'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+            ),
+
+            const SizedBox(height: 24),
+            if (_result.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _isSuccess ? Colors.green.shade100 : Colors.red.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _result,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: _isSuccess ? Colors.green.shade900 : Colors.red.shade900,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              )
+          ],
+        ),
       ),
     );
   }

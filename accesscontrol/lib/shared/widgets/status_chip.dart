@@ -10,40 +10,41 @@ class StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: _statusBg(status, context),
+        color: _statusBg(status),
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _statusFg(status).withOpacity(0.5)),
       ),
       child: Text(
         _text(status),
-        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _statusFg(status)),
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _statusFg(status)),
       ),
     );
   }
 
   String _text(VisitStatus s) {
     switch (s) {
-      case VisitStatus.programada: return 'programada';
-      case VisitStatus.autorizada: return 'autorizada';
-      case VisitStatus.rechazada:  return 'rechazada';
-      case VisitStatus.expirada:   return 'expirada';
+      case VisitStatus.programada: return 'PROGRAMADA';
+      case VisitStatus.autorizada: return 'INGRESÓ';
+      case VisitStatus.rechazada:  return 'RECHAZADA';
+      case VisitStatus.expirada:   return 'EXPIRADA';
     }
   }
 
-  Color _statusBg(VisitStatus s, BuildContext ctx) {
+  Color _statusBg(VisitStatus s) {
     switch (s) {
-      case VisitStatus.programada: return Theme.of(ctx).colorScheme.secondaryContainer;
-      case VisitStatus.autorizada: return Colors.green.shade100;
-      case VisitStatus.rechazada:  return Colors.red.shade100;
+      case VisitStatus.programada: return Colors.blue.shade50;
+      case VisitStatus.autorizada: return Colors.green.shade50;
+      case VisitStatus.rechazada:  return Colors.red.shade50;
       case VisitStatus.expirada:   return Colors.grey.shade200;
     }
   }
 
   Color _statusFg(VisitStatus s) {
     switch (s) {
-      case VisitStatus.programada: return Colors.orange.shade800;
-      case VisitStatus.autorizada: return Colors.green.shade800;
-      case VisitStatus.rechazada:  return Colors.red.shade800;
-      case VisitStatus.expirada:   return Colors.grey.shade800;
+      case VisitStatus.programada: return Colors.blue.shade700;
+      case VisitStatus.autorizada: return Colors.green.shade700;
+      case VisitStatus.rechazada:  return Colors.red.shade700;
+      case VisitStatus.expirada:   return Colors.grey.shade600;
     }
   }
 }

@@ -49,13 +49,19 @@ class SettingsPage extends StatelessWidget {
             Card(
               child: Column(children: [
                 ListTile(
-                  title: const Text('Correo'), 
-                  // Usamos los datos del estado
-                  trailing: Text(state.residentEmail)
+                  title: const Text('Nombre'), 
+                  subtitle: Text('${state.residentName} ${state.residentLastName}'),
+                  leading: const Icon(Icons.person),
                 ),
+                const Divider(height: 0),
+                ListTile(
+                  title: const Text('Correo'), 
+                  trailing: Text(state.residentEmail),
+                  leading: const Icon(Icons.email),
+                ),
+                const Divider(height: 0),
                 ListTile(
                   title: const Text('Unidad'), 
-                  // Usamos los datos del estado
                   trailing: Text(state.condoUnit)
                 ),
                 const Divider(height: 0),

@@ -3,6 +3,7 @@ import 'package:accesscontrol/state/app_state.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:accesscontrol/guard/state/guard_state.dart';
 
 class GuardSettingsPage extends StatelessWidget {
   const GuardSettingsPage({super.key});
@@ -31,17 +32,27 @@ class GuardSettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final guardState = context.watch<GuardState>();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Cuenta de Guardia', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
+        const CircleAvatar(radius: 40, child: Icon(Icons.security, size: 40)),
+        const SizedBox(height: 16),
+        Center(child: Text(guardState.guardFullName, style: Theme.of(context).textTheme.headlineSmall)),
+        const SizedBox(height: 32),
         Card(
-          child: ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('Cerrar sesión'),
-            onTap: () => _logout(context),
-          ),
+          child: Column(children: [
+            ListTile(
+              leading: const Icon(Icons.badge),
+              title: const Text('Rol'),
+              subtitle: const Text('Guardia de Seguridad'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Cerrar sesión'),
+              onTap: () => _logout(context),
+            ),
+          ])
         )
       ],
     );
