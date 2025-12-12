@@ -12,9 +12,8 @@ class GuardManualPage extends StatefulWidget {
 }
 
 class _GuardManualPageState extends State<GuardManualPage> {
-  // Controladores para selección
   String? _selectedTower;
-  String? _selectedResidentUid; // Aquí guardamos al residente seleccionado
+  String? _selectedResidentUid; 
   final _visitorNameCtrl = TextEditingController();
 
   bool _isLoading = false;
@@ -30,13 +29,12 @@ class _GuardManualPageState extends State<GuardManualPage> {
     super.dispose();
   }
 
-  // Filtra la lista de residentes según la torre seleccionada (si hay torres)
   List<Map<String, dynamic>> _getFilteredResidents() {
     if (widget.state.towers.isEmpty) {
-      return widget.state.residentsList; // Si no hay torres, devuelve todos
+      return widget.state.residentsList; 
     }
     if (_selectedTower == null) {
-      return []; // Si hay torres pero no seleccionó ninguna
+      return []; 
     }
     return widget.state.residentsList.where((r) => r['torre'] == _selectedTower).toList();
   }
@@ -57,7 +55,6 @@ class _GuardManualPageState extends State<GuardManualPage> {
       _result = '';
     });
 
-    // Buscar datos completos del residente seleccionado
     final residentData = widget.state.residentsList.firstWhere((r) => r['uid'] == _selectedResidentUid);
 
     final result = await widget.state.notifyOrLogManual(
@@ -110,13 +107,10 @@ class _GuardManualPageState extends State<GuardManualPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Leer configuración de módulos
     final unannouncedEnabled = widget.state.condoConfig['unannouncedVisitsEnabled'] ?? true;
     final hasTowers = widget.state.towers.isNotEmpty;
 
-    // SOLUCIÓN: Envolver en SingleChildScrollView
     return SingleChildScrollView(
-      // Opcional: Para que el teclado se oculte al hacer scroll
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag, 
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -126,7 +120,6 @@ class _GuardManualPageState extends State<GuardManualPage> {
             Text('Búsqueda de Residente', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
 
-            // 1. Dropdown de Torres (Solo si hay torres)
             if (hasTowers)
               DropdownButtonFormField<String>(
                 value: _selectedTower,
@@ -142,7 +135,6 @@ class _GuardManualPageState extends State<GuardManualPage> {
             
             if (hasTowers) const SizedBox(height: 16),
 
-            // 2. Dropdown de Residentes (Filtrado)
             DropdownButtonFormField<String>(
               value: _selectedResidentUid,
               decoration: const InputDecoration(labelText: 'Seleccionar Unidad/Residente', border: OutlineInputBorder()),
@@ -157,7 +149,6 @@ class _GuardManualPageState extends State<GuardManualPage> {
               onChanged: (val) => setState(() => _selectedResidentUid = val),
             ),
 
-            // 3. Campo de Visitante
             if (unannouncedEnabled) ...[
               const SizedBox(height: 16),
               const Divider(),

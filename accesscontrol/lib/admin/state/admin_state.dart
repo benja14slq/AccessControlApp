@@ -1,13 +1,10 @@
-// lib/admin/state/admin_state.dart
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class AdminState extends ChangeNotifier {
   
-  // DATOS DEL ADMIN LOGUEADO
-  String? adminUid; // <-- CAMBIO: Guardamos el UID
+  String? adminUid; 
   String? adminCondoName;
   String? adminCondoTypeId;
   bool isLoadingAdminData = true;

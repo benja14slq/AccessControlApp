@@ -13,12 +13,10 @@ class AdminGuardsPage extends StatefulWidget {
 
 class _AdminGuardsPageState extends State<AdminGuardsPage> {
   
-  // 1. Nuevos controladores
   final _emailCtrl = TextEditingController();
   final _nombreCtrl = TextEditingController();
   final _apellidoCtrl = TextEditingController();
 
-  // Muestra el diálogo para invitar
   Future<void> _showInviteDialog() async {
     final adminState = widget.appState.adminState;
     if (adminState.isLoadingAdminData) {
@@ -45,7 +43,6 @@ class _AdminGuardsPageState extends State<AdminGuardsPage> {
                 decoration: const InputDecoration(labelText: 'Email del Guardia'),
                 keyboardType: TextInputType.emailAddress,
               ),
-              // 2. Nuevos campos de Nombre y Apellido
               TextField(
                 controller: _nombreCtrl,
                 decoration: const InputDecoration(labelText: 'Nombre'),
@@ -147,7 +144,6 @@ class _AdminGuardsPageState extends State<AdminGuardsPage> {
 
     if (confirm == true) {
         await FirebaseFirestore.instance.collection('Guardias').doc(docId).delete();
-        // Opcional: También podrías deshabilitar su usuario en Auth si usas Cloud Functions
     }
   }
 
@@ -156,7 +152,6 @@ class _AdminGuardsPageState extends State<AdminGuardsPage> {
     final adminUid = FirebaseAuth.instance.currentUser?.uid;
 
     return Scaffold(
-      // 6. El StreamBuilder ahora apunta a 'Guardias'
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('Guardias')
@@ -185,7 +180,6 @@ class _AdminGuardsPageState extends State<AdminGuardsPage> {
               final data = guards[i].data() as Map<String, dynamic>;
               final String estado = data['estado'] ?? 'Pendiente';
               
-              // 7. Mostramos nombre y apellido
               final String title = '${data['nombre']} ${data['apellido']}';
 
               return Card(

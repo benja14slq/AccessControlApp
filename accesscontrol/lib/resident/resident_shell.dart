@@ -18,7 +18,7 @@ class ResidentShell extends StatefulWidget {
 }
 
 class _ResidentShellState extends State<ResidentShell> {
-  int index = 0; // 0: Home, 1: Crear, 2: Visitas, 3: Vehículos, 4: Cuenta
+  int index = 0; 
 
   @override
   Widget build(BuildContext context) {

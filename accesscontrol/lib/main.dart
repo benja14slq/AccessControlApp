@@ -1,10 +1,9 @@
-// lib/main.dart
 import 'package:accesscontrol/auth/login_page.dart';
 import 'package:accesscontrol/state/app_state.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'package:provider/provider.dart'; // <-- 1. Importa Provider
+import 'package:provider/provider.dart'; 
 
 final AppState globalState = AppState();
 
@@ -15,7 +14,6 @@ Future<void> main() async {
   );
   
   runApp(
-    // 2. Envuelve tu app en un ChangeNotifierProvider
     ChangeNotifierProvider(
       create: (context) => globalState,
       child: const RoleApp(),
@@ -35,7 +33,6 @@ class RoleApp extends StatelessWidget {
         colorSchemeSeed: Colors.indigo,
         brightness: Brightness.light,
       ),
-      // 3. Pasa el estado al LoginPage
       home: LoginPage(appState: globalState),
     );
   }

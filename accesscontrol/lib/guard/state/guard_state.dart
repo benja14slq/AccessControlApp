@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:accesscontrol/shared/api_constants.dart';
-import 'package:accesscontrol/shared/models.dart'; // Asegúrate de tener este import
+import 'package:accesscontrol/shared/models.dart'; 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -28,7 +28,6 @@ class GuardState extends ChangeNotifier {
   Map<String, dynamic> condoConfig = {};
   bool isLoading = true;
 
-  // Getter seguro
   String get adminUid => _adminUid ?? '';
   String get guardFullName => _guardFullName ?? 'Guardia';
 
@@ -47,15 +46,13 @@ class GuardState extends ChangeNotifier {
          throw Exception('Perfil de guardia no encontrado para el UID: $uid');
       }
       
-      // Obtenemos el documento real
       final guardDoc = query.docs.first;
       final guardData = guardDoc.data(); 
       
-      _guardDocRef = guardDoc.reference; // Guardamos la referencia correcta
-      _adminUid = guardData['adminUid']; // Ahora sí tenemos el adminUid
+      _guardDocRef = guardDoc.reference; 
+      _adminUid = guardData['adminUid']; 
       _guardFullName = '${guardData['nombre']} ${guardData['apellido']}';
 
-      // Ahora que _adminUid NO es nulo, cargamos el resto
       if (_adminUid != null) {
         _loadEvents();
         _loadConfig();
@@ -80,7 +77,7 @@ class GuardState extends ChangeNotifier {
       residentsList = snapshot.docs.map((doc) {
         final data = doc.data();
         return {
-          'uid': data['uid'], // Auth UID
+          'uid': data['uid'], 
           'nombre': '${data['nombre']} ${data['apellido']}',
           'torre': data['torre'] ?? '',
           'numero': data['numero'] ?? '',
@@ -164,7 +161,6 @@ class GuardState extends ChangeNotifier {
       final String faceId = data['faceId'];
       final double similarity = data['similarity'];
 
-      // Búsqueda en Firestore
       final residentQuery = await _db.collection('Residentes')
           .where('adminUid', isEqualTo: _adminUid)
           .where('rekognitionFaceId', isEqualTo: faceId)
@@ -249,8 +245,6 @@ class GuardState extends ChangeNotifier {
           .get();
 
       if (query.docs.isEmpty) {
-        // Si entra aquí, el pase NO existe con esos filtros.
-        // Vamos a hacer una búsqueda solo por código para ver qué pasa
         final debugQuery = await _db.collection('Visitas').where('code', isEqualTo: code).get();
         if (debugQuery.docs.isNotEmpty) {
             final doc = debugQuery.docs.first.data();
@@ -261,7 +255,6 @@ class GuardState extends ChangeNotifier {
             
             if (doc['adminUid'] != _adminUid) throw Exception('Este pase pertenece a otro condominio.');
             if (doc['status'] != 'programada') throw Exception('Este pase ya fue utilizado o rechazado.');
-            // Si llegamos aquí, está vencido
              throw Exception('El pase ha expirado.');
         }
         
@@ -313,7 +306,6 @@ class GuardState extends ChangeNotifier {
     }
   }
 
-  // --- LPR (PATENTE) ---
   Future<Map<String, dynamic>> verifyPlateByLPR() async {
     if (_adminUid == null) throw Exception("Error de inicialización");
     String recognizedPlate = '';
@@ -340,7 +332,6 @@ class GuardState extends ChangeNotifier {
       if (bestMatch.isEmpty) throw Exception('No se pudo leer una patente.');
       recognizedPlate = bestMatch;
 
-      // Búsqueda
       final vehicleQuery = await _db.collectionGroup('Vehiculos')
           .where('adminUid', isEqualTo: _adminUid)
           .where('plate', isEqualTo: recognizedPlate)
@@ -384,7 +375,6 @@ class GuardState extends ChangeNotifier {
     }
   }
 
-  // --- ACCESO MANUAL / NOTIFICACIÓN (MODIFICADO PARA DROPDOWN) ---
   Future<Map<String, dynamic>> notifyOrLogManual({
     required String residentUid,
     required String residentName,
@@ -395,7 +385,6 @@ class GuardState extends ChangeNotifier {
     if (_adminUid == null) return {'status': 'error', 'message': 'Error de inicialización'};
 
     try {
-      // SI ES NOTIFICACIÓN
       if (visitorName != null && visitorName.isNotEmpty) {
         final newNotification = await _db.collection('notificaciones_visita').add({
           'adminUid': _adminUid,
@@ -416,7 +405,6 @@ class GuardState extends ChangeNotifier {
           'message': 'Notificando a $residentName...',
         };
       } 
-      // SI ES REGISTRO MANUAL
       else {
         await _logEvent(
           description: 'Acceso manual: $residentName', 
@@ -436,7 +424,6 @@ class GuardState extends ChangeNotifier {
     }
   }
 
-  // --- LOG DE EVENTOS ---
   Future<void> _logEvent({
     required String description, 
     required String status,

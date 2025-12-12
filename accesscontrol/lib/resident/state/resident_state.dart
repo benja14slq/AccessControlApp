@@ -23,7 +23,6 @@ class ResidentState extends ChangeNotifier {
   List<FamilyMember> familyMembers = [];
   List<DocumentSnapshot> pendingNotifications = [];
 
-  // --- DATOS DEL ESTADO ---
   String residentEmail = '';
   String residentName = '';
   String residentLastName = '';
@@ -296,22 +295,22 @@ class ResidentState extends ChangeNotifier {
     try {
       final newCode = mkCode();
       await _db.collection('Visitas').add({
-        'adminUid': _adminUid, // Usa el _adminUid que ya cargamos
+        'adminUid': _adminUid, 
         'residentUid': uid,
         'visitorName': visitorName,
-        'visitorLastName': visitorLastName, // Campo nuevo
-        'visitorId': rut, // Campo renombrado
+        'visitorLastName': visitorLastName,
+        'visitorId': rut, 
         'phone': phone,
         'plate': plate,
         'code': newCode,
         'status': 'programada',
         'createdAt': FieldValue.serverTimestamp(),
-        'scheduledAt': Timestamp.fromDate(scheduledAt), // Renombrado
+        'scheduledAt': Timestamp.fromDate(scheduledAt),
       });
       return newCode;
     } catch (e) {
       print("Error al crear visita: $e");
-      rethrow; // Lanza el error para que la UI lo atrape
+      rethrow; 
     }
   }
 
@@ -350,7 +349,6 @@ class ResidentState extends ChangeNotifier {
       final bytes = await File(photo.path).readAsBytes();
       final String base64Image = base64Encode(bytes);
 
-      // 1. Llama a la *misma* Lambda de registro
       final Uri registerUrl = Uri.parse('$apiGatewayUrl/register');
       final response = await http.post(
         registerUrl,
@@ -366,13 +364,10 @@ class ResidentState extends ChangeNotifier {
       final data = jsonDecode(response.body);
       final String faceId = data['faceId'];
 
-      // 2. Guarda el FaceId en el documento del *miembro familiar*
       await _residentDocRef.collection('GrupoFamiliar').doc(memberId).update({
         'hasFaceId': true,
         'rekognitionFaceId': faceId,
       });
-
-      // El listener _loadFamilyMembers se encargará de actualizar la UI
       
     } catch (e) {
       print('Error al registrar rostro familiar: $e');
@@ -399,14 +394,13 @@ class ResidentState extends ChangeNotifier {
       final bytes = await File(photo.path).readAsBytes();
       final String base64Image = base64Encode(bytes);
 
-      // --- USA LAS CONSTANTES AQUÍ ---
       final Uri registerUrl = Uri.parse('$apiGatewayUrl/register');
       
       final response = await http.post(
         registerUrl,
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': apiKey, // <-- Usa la constante
+          'x-api-key': apiKey,
         },
         body: jsonEncode({
           'imageBase64': base64Image,
@@ -431,7 +425,6 @@ class ResidentState extends ChangeNotifier {
       rethrow; 
     }
   }
-  // --- GETTERS SIMPLIFICADOS ---
   List<VisitPass> get upcomingVisits {
     return _upcomingVisitsList;
   }

@@ -24,7 +24,6 @@ class _RegisterAdminPageState extends State<RegisterAdminPage> {
   bool _isLoading = false;
 
   void dispose() {
-    // Limpia todos los controllers
     _emailCtrl.dispose();
     _nameCtrl.dispose();
     _lastNameCtrl.dispose();
@@ -142,11 +141,10 @@ class _RegisterAdminPageState extends State<RegisterAdminPage> {
                 : DropdownButtonFormField<String>(
                     value: _selectedCondoTypeId,
                     decoration: const InputDecoration(labelText: 'Tipo de Entorno'),
-                    // Valida que se haya seleccionado uno
                     validator: (value) => value == null ? 'Selecciona un tipo' : null,
                     items: appState.condoTypes.map((type) {
                       return DropdownMenuItem(
-                        value: type.id, // Guardamos el ID del documento
+                        value: type.id,
                         child: Text(type.name),
                       );
                     }).toList(),

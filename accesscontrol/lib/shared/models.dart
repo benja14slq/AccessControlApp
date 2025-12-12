@@ -1,7 +1,6 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// MODELOS COMPARTIDOS
 enum VisitStatus { programada, autorizada, rechazada, expirada }
 
 class VisitPass {
@@ -20,7 +19,7 @@ class VisitPass {
   final String id;
   final String code;
   final String visitorName;
-  final String? visitorLastName; // AÑADIDO
+  final String? visitorLastName; 
   final String? visitorId;
   final String? phone;
   final String? plate;
@@ -39,7 +38,7 @@ class VisitPass {
       phone: data['phone'],
       plate: data['plate'],
       scheduledAt: (data['scheduledAt'] as Timestamp).toDate(),
-      hostResident: '', // Este dato suele venir de otro lado, se puede dejar vacío o llenar luego
+      hostResident: '', 
       status: _mapStatus(data['status']),
     );
   }
@@ -54,17 +53,17 @@ class VisitPass {
 }
 
 class Vehicle {
-  final String id; // <-- AÑADIR
+  final String id; 
   final String plate;
   final String? alias;
 
   Vehicle({
-    required this.id, // <-- AÑADIR
+    required this.id,
     required this.plate, 
     this.alias
   });
 
-  factory Vehicle.fromFirestore(DocumentSnapshot doc) { // <-- AÑADIR
+  factory Vehicle.fromFirestore(DocumentSnapshot doc) { 
     final data = doc.data() as Map<String, dynamic>;
     return Vehicle(
       id: doc.id,
@@ -101,7 +100,6 @@ class FamilyMember {
   }
 }
 
-// Modelo para el Administrador
 class CondoUser {
   final String email;
   final String role; 
@@ -116,7 +114,6 @@ class CondoUser {
   });
 }
 
-// Modelo para el Guardia
 class AccessEvent {
   final String id;
   final String description;
@@ -132,7 +129,6 @@ class AccessEvent {
     this.residentName,
   });
 
-  // --- ESTA ES LA FUNCIÓN QUE TE FALTABA ---
   factory AccessEvent.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return AccessEvent(
@@ -146,8 +142,6 @@ class AccessEvent {
 }
 
 
-// --- FUNCIONES DE MOCKING (Creación de IDs/Códigos) ---
-// (También movidas de resident_state.dart para ser reutilizables)
 String mkId() => Random().nextInt(0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase();
 String mkCode() => 'PASS-${Random().nextInt(0xFFFF).toRadixString(16).padLeft(4, '0').toUpperCase()}';
 
@@ -157,7 +151,6 @@ class CondoType {
 
   CondoType({required this.id, required this.name});
 
-  // Factory para crear una instancia desde un documento de Firestore
   factory CondoType.fromFirestore(Map<String, dynamic> data, String documentId) {
     return CondoType(
       id: documentId,

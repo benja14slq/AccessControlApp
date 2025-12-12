@@ -1,5 +1,3 @@
-// lib/admin/screens/admin_residents_page.dart
-
 import 'package:accesscontrol/state/app_state.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -14,7 +12,6 @@ class AdminResidentsPage extends StatefulWidget {
 }
 
 class _AdminResidentsPageState extends State<AdminResidentsPage> {
-  // 1. Añadimos controladores para nombre y apellido
   final _emailCtrl = TextEditingController();
   final _nombreCtrl = TextEditingController();
   final _apellidoCtrl = TextEditingController();
@@ -52,7 +49,6 @@ class _AdminResidentsPageState extends State<AdminResidentsPage> {
     showDialog(
       context: context, 
       builder: (ctx) {
-        // Usamos un SingleChildScrollView por si el teclado es grande
         return AlertDialog(
           title: const Text('Invitar Residente'),
           content: SingleChildScrollView(
@@ -64,7 +60,6 @@ class _AdminResidentsPageState extends State<AdminResidentsPage> {
                   decoration: const InputDecoration(labelText: 'Email del Residente'),
                   keyboardType: TextInputType.emailAddress,
                 ),
-                // 2. Nuevos campos para Nombre y Apellido
                 TextField(
                   controller: _nombreCtrl, 
                   decoration: const InputDecoration(labelText: 'Nombre'),
@@ -103,7 +98,6 @@ class _AdminResidentsPageState extends State<AdminResidentsPage> {
     );
   }
 
-  // 3. Renombramos la función y cambiamos la lógica
   Future<void> _createPendingResident(BuildContext dialogContext, {required bool isEdificio}) async {
     final email = _emailCtrl.text.trim();
     final nombre = _nombreCtrl.text.trim();
@@ -176,10 +170,9 @@ class _AdminResidentsPageState extends State<AdminResidentsPage> {
     final adminUid = FirebaseAuth.instance.currentUser?.uid;
 
     return Scaffold(
-      // 6. El StreamBuilder ahora escucha la colección 'Residentes'
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('Residentes') // <-- Colección actualizada
+            .collection('Residentes')
             .where('adminUid', isEqualTo: adminUid)
             .orderBy('createdAt', descending: true)
             .snapshots(),
@@ -188,7 +181,6 @@ class _AdminResidentsPageState extends State<AdminResidentsPage> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          // (Resto del builder sin cambios...)
           if (snapshot.hasError) {
             return Center(child: Text('Error: ${snapshot.error}'));
           }
@@ -212,7 +204,6 @@ class _AdminResidentsPageState extends State<AdminResidentsPage> {
               
               final String estado = data['estado'] ?? 'Pendiente';
               
-              // 7. Usamos nombre y apellido del documento
               final String title = '${data['nombre']} ${data['apellido']}';
 
               return Card(

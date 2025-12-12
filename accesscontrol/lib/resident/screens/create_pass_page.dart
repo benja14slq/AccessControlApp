@@ -21,8 +21,8 @@ class CreatePassPage extends StatefulWidget {
 class _CreatePassPageState extends State<CreatePassPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
-  final _lastNameCtrl = TextEditingController(); // <-- NUEVO
-  final _rutCtrl = TextEditingController();      // <-- Renombrado (antes _idCtrl)
+  final _lastNameCtrl = TextEditingController(); 
+  final _rutCtrl = TextEditingController();      
   final _phoneCtrl = TextEditingController();
   final _plateCtrl = TextEditingController();
   final _emailVisitorCtrl = TextEditingController();
@@ -36,7 +36,7 @@ class _CreatePassPageState extends State<CreatePassPage> {
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _lastNameCtrl.dispose(); // <-- NUEVO
+    _lastNameCtrl.dispose(); 
     _rutCtrl.dispose();
     _phoneCtrl.dispose();
     _plateCtrl.dispose();

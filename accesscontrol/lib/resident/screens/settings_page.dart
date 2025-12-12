@@ -25,7 +25,7 @@ class SettingsPage extends StatelessWidget {
         );
       }
     } catch (e) {
-      // Manejar error
+      
     }
   }
 
@@ -36,7 +36,6 @@ class SettingsPage extends StatelessWidget {
       builder: (context, child) {
         final biometricsEnabled = state.condoConfig['biometricsEnabled'] ?? true;
         
-        // 2. Mostramos un 'loading' si el estado aún no carga el perfil
         if (state.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -108,22 +107,20 @@ class SettingsPage extends StatelessWidget {
               child: Column(children: [
                 SwitchListTile(
                   title: const Text('Notificaciones por email'),
-                  value: state.notifEmail, // Este valor ahora es 'bool'
-                  // 3. Llamamos al método async directamente
+                  value: state.notifEmail,
                   onChanged: state.setNotifEmail,
                 ),
                 const Divider(height: 0),
                 SwitchListTile(
                   title: const Text('Notificaciones push'),
-                  value: state.notifApp, // Este valor ahora es 'bool'
-                  // 3. Llamamos al método async directamente
+                  value: state.notifApp, 
                   onChanged: state.setNotifApp,
                 ),
               ]),
             ),
             const SizedBox(height: 24),
             OutlinedButton.icon(
-              onPressed: () => _logout(context), // Llama al logout real
+              onPressed: () => _logout(context), 
               icon: const Icon(Icons.logout), 
               label: const Text('Cerrar Sesión'),
             ),

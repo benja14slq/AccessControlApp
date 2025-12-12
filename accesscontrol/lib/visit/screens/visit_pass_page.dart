@@ -14,7 +14,7 @@ class VisitPassPage extends StatefulWidget {
 
 class _VisitPassPageState extends State<VisitPassPage> {
   VisitPass? _pass;
-  String _hostName = ''; // Para guardar el nombre del anfitrión
+  String _hostName = ''; 
   bool _isLoading = false;
   final _codeCtrl = TextEditingController();
   
@@ -27,12 +27,10 @@ class _VisitPassPageState extends State<VisitPassPage> {
     
     try {
       final code = _codeCtrl.text.trim().toUpperCase();
-      
-      // 2. Busca el pase en la colección 'Visitas'
+
       final query = await FirebaseFirestore.instance
           .collection('Visitas')
           .where('code', isEqualTo: code)
-          //.where('status', isEqualTo: 'programada') // Opcional: podrías querer mostrar pases ya usados
           .limit(1)
           .get();
 
@@ -44,7 +42,6 @@ class _VisitPassPageState extends State<VisitPassPage> {
       final data = visitDoc.data();
       final residentUid = data['residentUid'];
 
-      // 3. Busca el nombre del residente (Anfitrión)
       if (residentUid != null) {
         final residentDoc = await FirebaseFirestore.instance
             .collection('Residentes')
@@ -58,7 +55,6 @@ class _VisitPassPageState extends State<VisitPassPage> {
         }
       }
 
-      // 4. Crea el modelo VisitPass para mostrarlo
       setState(() {
         _pass = VisitPass(
           id: visitDoc.id,

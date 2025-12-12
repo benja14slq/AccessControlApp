@@ -1,10 +1,10 @@
 import 'package:accesscontrol/admin/admin_shell.dart';
 import 'package:accesscontrol/admin/main_admin.dart';
 import 'package:accesscontrol/auth/register_admin_page.dart';
-import 'package:accesscontrol/auth/register_guard_page.dart'; // <-- 1. IMPORTA LA NUEVA PÁGINA
+import 'package:accesscontrol/auth/register_guard_page.dart'; 
 import 'package:accesscontrol/auth/register_resident_page.dart';
-import 'package:accesscontrol/guard/guard_shell.dart'; // <-- Importa el shell del guardia
-import 'package:accesscontrol/guard/state/guard_state.dart'; // <-- Importa el estado (obsoleto)
+import 'package:accesscontrol/guard/guard_shell.dart';
+import 'package:accesscontrol/guard/state/guard_state.dart'; 
 import 'package:accesscontrol/resident/resident_shell.dart';
 import 'package:accesscontrol/resident/state/resident_state.dart';
 import 'package:accesscontrol/state/app_state.dart';
@@ -76,7 +76,7 @@ class _LoginPageState extends State<LoginPage> {
 
         await realResidentState.init();
         
-        if (!mounted) return; // Comprueba 'mounted' de nuevo por si acaso
+        if (!mounted) return;
         Navigator.of(context).pushReplacement(MaterialPageRoute(
           builder: (_) => ResidentShell(residentState: realResidentState), 
         ));
@@ -96,7 +96,6 @@ class _LoginPageState extends State<LoginPage> {
 
         if (!mounted) return;
         Navigator.of(context).pushReplacement(MaterialPageRoute(
-          // Le pasamos el estado real al Shell
           builder: (_) => GuardShell(guardState: realGuardState), 
         ));
         return;
@@ -106,7 +105,6 @@ class _LoginPageState extends State<LoginPage> {
       throw Exception('Usuario autenticado pero sin rol asignado.');
 
     } on FirebaseAuthException catch (e) {
-      // 5. Manejar errores de autenticación
       String errorMsg = 'Error desconocido. Intenta de nuevo.';
       if (e.code == 'user-not-found' || e.code == 'INVALID_LOGIN_CREDENTIALS') {
         errorMsg = 'Correo o contraseña incorrectos.';
@@ -183,10 +181,8 @@ class _LoginPageState extends State<LoginPage> {
             const Divider(),
             const SizedBox(height: 16),
             
-            // --- Opciones de Registro y Visita ---
-            
             OutlinedButton(
-              onPressed: _isLoading ? null : () { // Deshabilita mientras carga
+              onPressed: _isLoading ? null : () { 
                 Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => RegisterAdminPage(appState: widget.appState),
                 ));
@@ -195,7 +191,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
             const SizedBox(height: 8),
             OutlinedButton(
-              onPressed: _isLoading ? null : () { // Deshabilita mientras carga
+              onPressed: _isLoading ? null : () { 
                 Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => RegisterResidentPage(appState: widget.appState),
                 ));

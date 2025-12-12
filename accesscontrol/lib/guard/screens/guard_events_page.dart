@@ -1,9 +1,8 @@
 import 'package:accesscontrol/guard/state/guard_state.dart';
 import 'package:accesscontrol/shared/utils.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // <-- AÑADIR
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 import 'package:flutter/material.dart';
 
-// --- CONVERTIR A STATEFULWIDGET ---
 class GuardEventsPage extends StatefulWidget {
   const GuardEventsPage({super.key, required this.state});
   final GuardState state;
@@ -13,7 +12,6 @@ class GuardEventsPage extends StatefulWidget {
 }
 
 class _GuardEventsPageState extends State<GuardEventsPage> {
-  // --- ESTADO PARA FILTROS ---
   String? _selectedResidentUid;
   List<QueryDocumentSnapshot> _residents = [];
   bool _isLoadingResidents = true;
@@ -24,16 +22,14 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
     _loadResidentFilters();
   }
 
-  // --- FUNCIÓN PARA CARGAR FILTROS ---
   Future<void> _loadResidentFilters() async {
-    // Usamos el getter público que creamos en GuardState
     final adminUid = widget.state.adminUid; 
 
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('Residentes')
           .where('adminUid', isEqualTo: adminUid)
-          .where('estado', isEqualTo: 'Registrado') // Solo residentes activos
+          .where('estado', isEqualTo: 'Registrado') 
           .orderBy('nombre')
           .get();
       
@@ -51,15 +47,13 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
   @override
   Widget build(BuildContext context) {
 
-    // --- CONSTRUCCIÓN DE CONSULTA DINÁMICA ---
     Query query = FirebaseFirestore.instance
         .collection('Eventos')
-        .where('adminUid', isEqualTo: widget.state.adminUid) // Filtra por el admin del guardia
+        .where('adminUid', isEqualTo: widget.state.adminUid)
         .orderBy('timestamp', descending: true)
         .limit(50);
 
     if (_selectedResidentUid != null) {
-      // Aplica el filtro de residente si está seleccionado
       query = query.where('residentUid', isEqualTo: _selectedResidentUid);
     }
 
@@ -77,18 +71,16 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
                   onChanged: (value) => setState(() => _selectedResidentUid = value),
                   items: _residents.map((doc) {
                     final data = doc.data() as Map<String, dynamic>;
-                    // Construir nombre y unidad
                     String torre = data['torre'] ?? '';
                     String numero = data['numero'] ?? '';
                     String unit = (torre.isNotEmpty ? 'Torre $torre - ' : 'Nº ') + numero;
                     String name = '${data['nombre']} ${data['apellido']}';
                     
                     return DropdownMenuItem<String>(
-                      value: data['uid'], // <-- Usar Auth UID para el filtro
+                      value: data['uid'],
                       child: Text('$name ($unit)', overflow: TextOverflow.ellipsis),
                     );
                   }).toList(),
-                  // Muestra el item seleccionado con el texto completo
                   selectedItemBuilder: (context) => _residents
                     .where((doc) => doc['uid'] == _selectedResidentUid)
                     .map((doc) {
@@ -111,12 +103,10 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
         ),
         const Divider(height: 1),
 
-        // --- STREAMBUILDER BASADO EN LA CONSULTA ---
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
             stream: query.snapshots(),
             builder: (context, snapshot) {
-              // Ya no usamos AnimatedBuilder ni state.events
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }

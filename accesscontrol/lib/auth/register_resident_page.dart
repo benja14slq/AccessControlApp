@@ -20,16 +20,14 @@ class _RegisterResidentPageState extends State<RegisterResidentPage> {
   final _confirmPassCtrl = TextEditingController();
   
   bool _isLoading = false;
-  bool _emailVerified = false; // 1. Nuevo estado para controlar la UI
-  QueryDocumentSnapshot? _pendingResidentDoc; // 2. Para guardar la invitación
+  bool _emailVerified = false;
+  QueryDocumentSnapshot? _pendingResidentDoc;
 
   @override
   void dispose() {
-    // ... (dispose de todos los controllers)
     super.dispose();
   }
 
-  // 3. NUEVA FUNCIÓN para verificar el email primero
   Future<void> _verifyEmail() async {
     final email = _emailCtrl.text.trim();
     if (email.isEmpty || !email.contains('@')) {
@@ -43,7 +41,7 @@ class _RegisterResidentPageState extends State<RegisterResidentPage> {
 
     try {
       final query = await FirebaseFirestore.instance
-          .collection('Residentes') // <-- Buscamos en 'Residentes'
+          .collection('Residentes') 
           .where('correo', isEqualTo: email)
           .where('estado', isEqualTo: 'Pendiente')
           .limit(1)
@@ -56,12 +54,11 @@ class _RegisterResidentPageState extends State<RegisterResidentPage> {
       final doc = query.docs.first;
       final data = doc.data() as Map<String, dynamic>;
 
-      // 4. Email verificado: guardamos el doc y rellenamos los campos
       setState(() {
         _pendingResidentDoc = doc;
         _nameCtrl.text = data['nombre'] ?? '';
         _lastNameCtrl.text = data['apellido'] ?? '';
-        _emailVerified = true; // Mostramos el resto del formulario
+        _emailVerified = true; 
       });
 
     } catch (e) {
@@ -73,11 +70,9 @@ class _RegisterResidentPageState extends State<RegisterResidentPage> {
     }
   }
 
-  // 5. FUNCIÓN _register() ACTUALIZADA
   Future<void> _register() async {
-    // Valida solo el formulario (contraseñas)
     if (!_formKey.currentState!.validate()) return;
-    if (_pendingResidentDoc == null) return; // Seguridad
+    if (_pendingResidentDoc == null) return; 
 
     setState(() => _isLoading = true);
 
@@ -85,7 +80,6 @@ class _RegisterResidentPageState extends State<RegisterResidentPage> {
       final invitationData = _pendingResidentDoc!.data() as Map<String, dynamic>;
       final adminUid = invitationData['adminUid'];
 
-      // 1. BUSCAR DATOS DEL ADMIN
       final adminDoc = await FirebaseFirestore.instance
           .collection('Administradores')
           .doc(adminUid)
@@ -96,7 +90,6 @@ class _RegisterResidentPageState extends State<RegisterResidentPage> {
       }
       final adminData = adminDoc.data()!;
 
-      // 2. CREAR USUARIO EN AUTHENTICATION
       UserCredential credential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
               email: invitationData['correo'], 
@@ -105,24 +98,22 @@ class _RegisterResidentPageState extends State<RegisterResidentPage> {
       
       final residentUid = credential.user!.uid;
 
-      // 3. ACTUALIZAR EL DOCUMENTO 'Residentes'
-      // Ya no creamos un doc nuevo, actualizamos el existente
       await _pendingResidentDoc!.reference.update({
         'uid': residentUid,
         'nombreCondominio': adminData['nombreCondominio'],
         'tipoCondominioId': adminData['tipoCondominioId'],
-        'estado': 'Registrado', // ¡Activamos la cuenta!
+        'estado': 'Registrado',
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('¡Cuenta activada con éxito! Ya puedes iniciar sesión.'))
         );
-        Navigator.of(context).pop(); // Regresa al Login
+        Navigator.of(context).pop(); 
       }
 
     } catch (e) {
-      // (Manejo de errores...)
+
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -145,11 +136,9 @@ class _RegisterResidentPageState extends State<RegisterResidentPage> {
                 controller: _emailCtrl,
                 decoration: const InputDecoration(labelText: 'Correo (invitado por tu admin)'),
                 keyboardType: TextInputType.emailAddress,
-                // 6. El email se deshabilita después de verificar
                 enabled: !_isLoading && !_emailVerified, 
               ),
               
-              // 7. Mostramos el resto del formulario CONDICIONALMENTE
               if (!_emailVerified)
                 const SizedBox(height: 16),
               
@@ -161,7 +150,6 @@ class _RegisterResidentPageState extends State<RegisterResidentPage> {
                   style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                 ),
 
-              // 8. Campos que aparecen después de la verificación
               if (_emailVerified)
                 Column(
                   children: [
@@ -169,13 +157,13 @@ class _RegisterResidentPageState extends State<RegisterResidentPage> {
                     TextFormField(
                       controller: _nameCtrl,
                       decoration: const InputDecoration(labelText: 'Nombre'),
-                      enabled: false, // No se puede editar
+                      enabled: false, 
                     ),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _lastNameCtrl,
                       decoration: const InputDecoration(labelText: 'Apellido'),
-                      enabled: false, // No se puede editar
+                      enabled: false, 
                     ),
                     const SizedBox(height: 16),
                     const Divider(),
