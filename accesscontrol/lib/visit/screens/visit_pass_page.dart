@@ -56,12 +56,14 @@ class _VisitPassPageState extends State<VisitPassPage> {
       }
 
       setState(() {
+        // CAMBIO: Actualizamos la creación del objeto para que coincida con el nuevo modelo
         _pass = VisitPass(
           id: visitDoc.id,
-          code: data['code'],
-          visitorName: data['visitorName'],
+          code: data['code'] ?? '',
+          condominioId: data['condominioId'] ?? '', // Nuevo campo obligatorio
+          residentUid: residentUid ?? '',           // Nuevo campo obligatorio
+          visitorName: data['visitorName'] ?? 'Visitante',
           scheduledAt: (data['scheduledAt'] as Timestamp).toDate(),
-          hostResident: _hostName,
           status: VisitStatus.values.firstWhere(
             (e) => e.toString() == 'VisitStatus.${data['status']}',
             orElse: () => VisitStatus.programada,
@@ -141,7 +143,8 @@ class _VisitPassPageState extends State<VisitPassPage> {
                               subtitle: const Text('Visitante'),
                             ),
                             ListTile(
-                              title: Text(_pass!.hostResident), 
+                              // CAMBIO: Ahora usamos _hostName directamente en lugar de _pass!.hostResident
+                              title: Text(_hostName.isNotEmpty ? _hostName : 'Desconocido'), 
                               subtitle: const Text('Anfitrión (Residente)'),
                             ),
                             ListTile(

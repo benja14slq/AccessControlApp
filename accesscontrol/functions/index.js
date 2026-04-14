@@ -10,7 +10,6 @@ const messaging = getMessaging();
 
 setGlobalOptions({ region: "us-central1" });
 
-
 export const sendVisitNotification = onDocumentCreated("notificaciones_visita/{notificationId}", async (event) => {
   const snap = event.data;
   if (!snap) {

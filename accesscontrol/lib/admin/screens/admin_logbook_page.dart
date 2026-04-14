@@ -27,13 +27,13 @@ class _AdminLogbookPageState extends State<AdminLogbookPage> {
   }
 
   Future<void> _loadResidentFilters() async {
-    final adminUid = widget.appState.adminState.adminUid;
-    if (adminUid == null) return;
+    final condominioId = widget.appState.adminState.currentCondominioId;
+    if (condominioId == null) return;
 
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('Residentes')
-          .where('adminUid', isEqualTo: adminUid)
+          .where('condominioId', isEqualTo: condominioId)
           .where('estado', isEqualTo: 'Registrado')
           .get();
 
@@ -57,17 +57,21 @@ class _AdminLogbookPageState extends State<AdminLogbookPage> {
 
   @override
   Widget build(BuildContext context) {
-    final adminUid = widget.appState.adminState.adminUid;
+    final condominioId = widget.appState.adminState.currentCondominioId;
     final bool isEdificio = widget.appState.adminState.adminCondoTypeId
-        ?.toLowerCase().contains('edificios') ?? false;
+        ?.toLowerCase().contains('edificio') ?? false;
+
+    if (condominioId == null){
+      return const Center(child: Text('Cargando datos del condominio...'));
+    }
 
     Query query = FirebaseFirestore.instance
         .collection('Eventos')
-        .where('adminUid', isEqualTo: adminUid)
+        .where('condominioId', isEqualTo: condominioId)
         .orderBy('timestamp', descending: true)
         .limit(50);
 
-    if (_selectedResidentUid != null) {
+    if (_selectedResidentUid != null){
       query = query.where('residentUid', isEqualTo: _selectedResidentUid);
     }
     if (_selectedTower != null) {
@@ -101,7 +105,7 @@ class _AdminLogbookPageState extends State<AdminLogbookPage> {
               ),
               if (_selectedResidentUid != null)
                 IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() => _selectedResidentUid = null)),
-              
+
               if (isEdificio) ...[
                 const SizedBox(width: 10),
                 Expanded(
@@ -110,13 +114,13 @@ class _AdminLogbookPageState extends State<AdminLogbookPage> {
                     value: _selectedTower,
                     hint: const Text('Filtrar por Torre'),
                     onChanged: (value) => setState(() => _selectedTower = value),
-                    items: _towers.map((torre) {
+                    items: _towers.map((torre){
                       return DropdownMenuItem(value: torre, child: Text(torre));
-                    }).toList(),
+                    }).toList(),      
                   ),
                 ),
                 if (_selectedTower != null)
-                  IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() => _selectedTower = null)),
+                  IconButton(onPressed: () => setState(() => _selectedTower = null), icon: const Icon(Icons.clear)),
               ]
             ],
           ),
@@ -125,16 +129,16 @@ class _AdminLogbookPageState extends State<AdminLogbookPage> {
 
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: query.snapshots(),
+            stream: query.snapshots(), 
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
-              if (snapshot.hasError) {
+              if (snapshot.hasError){
                 return Center(child: Text('Error: ${snapshot.error}'));
               }
               if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return const Center(child: Text('Sin eventos registrados (o que coincidan con el filtro).'));
+                return const Center(child: Text('Sin eventos registrados.'));
               }
 
               final events = snapshot.data!.docs;
@@ -145,39 +149,77 @@ class _AdminLogbookPageState extends State<AdminLogbookPage> {
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (context, i) {
                   final data = events[i].data() as Map<String, dynamic>;
-                  final status = data['status'] ?? 'desconocido';
-                  
+                  final rawStatus = data['status'] ?? 'desconocido';
+
+                  // 1. Asignamos iconos y colores
                   IconData icon = Icons.info_outline;
                   Color color = Colors.blueGrey;
-                  if (status.contains('autorizada')) {
+                  if (rawStatus.contains('autorizada')) {
                     icon = Icons.check_circle_outline;
                     color = Colors.green;
-                  } else if (status.contains('rechazada')) {
+                  } else if (rawStatus.contains('rechazada')) {
                     icon = Icons.cancel_outlined;
                     color = Colors.red;
-                  } else if (status.contains('manual')) {
+                  } else if (rawStatus.contains('manual')) {
                     icon = Icons.key_outlined;
                     color = Colors.orange;
                   }
 
+                  // 2. Formateamos el texto para que se lea profesionalmente
+                  String statusText = 'Desconocido';
+                  switch (rawStatus) {
+                    case 'autorizada_qr': statusText = 'Autorizado (Pase QR)'; break;
+                    case 'rechazada_qr': statusText = 'Rechazado (Pase QR)'; break;
+                    case 'autorizada_facial': statusText = 'Autorizado (Biometría)'; break;
+                    case 'rechazada_facial': statusText = 'Rechazado (Biometría)'; break;
+                    case 'autorizada_lpr': statusText = 'Autorizado (Patente)'; break;
+                    case 'rechazada_lpr': statusText = 'Rechazado (Patente)'; break;
+                    case 'autorizada_manual': statusText = 'Ingreso Manual Registrado'; break;
+                  }
+
                   final String residentInfo = data['residentName'] != null
-                      ? '\nResidente: ${data['residentName']}'
+                      ? 'Residente: ${data['residentName']}'
                       : '';
 
+                  // 3. Devolvemos la tarjeta con el diseño limpio
                   return Card(
-                    child: ListTile(
-                      leading: Icon(icon, color: color),
-                      title: Text(data['description'] ?? 'Evento sin descripción'),
-                      subtitle: Text(
-                        'Estado: $status • ${formatCompact((data['timestamp'] as Timestamp).toDate())}$residentInfo'
+                    elevation: 1,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: color.withOpacity(0.1),
+                          child: Icon(icon, color: color),
+                        ),
+                        title: Text(
+                          data['description'] ?? 'Evento sin descripción',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.symmetric(),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '$statusText • Hace ${formatCompact((data['timestamp'] as Timestamp).toDate())}',
+                                style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
+                              ),
+                              if (residentInfo.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(residentInfo, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              ]
+                            ],
+                          ),
+                        ),
+                        isThreeLine: residentInfo.isNotEmpty,
                       ),
-                      isThreeLine: residentInfo.isNotEmpty,
                     ),
                   );
                 },
               );
-            },
-          ),
+            }
+          )
         ),
       ],
     );

@@ -23,12 +23,13 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
   }
 
   Future<void> _loadResidentFilters() async {
-    final adminUid = widget.state.adminUid; 
+    // CAMBIO: Ahora obtenemos el condominioId desde el estado
+    final condominioId = widget.state.condominioId; 
 
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('Residentes')
-          .where('adminUid', isEqualTo: adminUid)
+          .where('condominioId', isEqualTo: condominioId) // CAMBIO
           .where('estado', isEqualTo: 'Registrado') 
           .orderBy('nombre')
           .get();
@@ -47,9 +48,10 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
   @override
   Widget build(BuildContext context) {
 
+    // CAMBIO: Filtramos los eventos por condominioId
     Query query = FirebaseFirestore.instance
         .collection('Eventos')
-        .where('adminUid', isEqualTo: widget.state.adminUid)
+        .where('condominioId', isEqualTo: widget.state.condominioId) // CAMBIO
         .orderBy('timestamp', descending: true)
         .limit(50);
 

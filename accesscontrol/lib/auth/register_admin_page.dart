@@ -14,6 +14,7 @@ class RegisterAdminPage extends StatefulWidget {
 class _RegisterAdminPageState extends State<RegisterAdminPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
+  final _rutCtrl = TextEditingController(); // NUEVO CAMPO RUT
   final _nameCtrl = TextEditingController();     
   final _lastNameCtrl = TextEditingController();   
   final _condoNameCtrl = TextEditingController(); 
@@ -23,8 +24,10 @@ class _RegisterAdminPageState extends State<RegisterAdminPage> {
   String? _selectedCondoTypeId;
   bool _isLoading = false;
 
+  @override
   void dispose() {
     _emailCtrl.dispose();
+    _rutCtrl.dispose();
     _nameCtrl.dispose();
     _lastNameCtrl.dispose();
     _condoNameCtrl.dispose();
@@ -48,18 +51,35 @@ class _RegisterAdminPageState extends State<RegisterAdminPage> {
       final email = _emailCtrl.text.trim();
       final password = _passCtrl.text.trim();
 
+      // 1. Crear usuario en Auth
       UserCredential userCredential = await FirebaseAuth.instance
         .createUserWithEmailAndPassword(email: email, password: password);
 
       final uid = userCredential.user!.uid;
 
+      // 2. Crear documento en la nueva colección Condominios
+      final condoRef = FirebaseFirestore.instance.collection('Condominios').doc();
+      final condoData = {
+        'nombreCondominio': _condoNameCtrl.text.trim(),
+        'tipoCondominioID': _selectedCondoTypeId,
+        'configuracion': {
+          // Valores por defecto de los módulos
+          'biometria_activa': false, 
+          'lpr_activo': false,
+        },
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+      
+      await condoRef.set(condoData);
+
+      // 3. Crear documento en colección Administradores vinculándolo al Condominio
       final adminData = {
         'uid': uid,
+        'rut': _rutCtrl.text.trim(),
         'email': email,
         'nombre': _nameCtrl.text.trim(),
         'apellido': _lastNameCtrl.text.trim(),
-        'nombreCondominio': _condoNameCtrl.text.trim(),
-        'tipoCondominioId': _selectedCondoTypeId,
+        'condominiosIds': [condoRef.id], // Arreglo Multi-tenant
         'createdAt': FieldValue.serverTimestamp(),
       };
 
@@ -70,13 +90,13 @@ class _RegisterAdminPageState extends State<RegisterAdminPage> {
 
       if (mounted){
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Administrador registrado con éxito.'))
+          const SnackBar(content: Text('Condominio y Administrador registrados con éxito.'))
         );
         Navigator.of(context).pop();
       }
 
     } on FirebaseAuthException catch (e) {
-      String errorMsg = 'Ocurrio un error. Intenta de nuevo.';
+      String errorMsg = 'Ocurrió un error. Intenta de nuevo.';
       if (e.code == 'weak-password'){
         errorMsg = 'La contraseña es muy débil.';
       } else if (e.code == 'email-already-in-use'){
@@ -108,11 +128,12 @@ class _RegisterAdminPageState extends State<RegisterAdminPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              const Text('Datos del Administrador', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
               TextFormField(
-                controller: _emailCtrl,
-                decoration: const InputDecoration(labelText: 'Correo'),
-                keyboardType: TextInputType.emailAddress,
-                validator: (v) => (v == null || !v.contains('@')) ? 'Email inválido' : null,
+                controller: _rutCtrl,
+                decoration: const InputDecoration(labelText: 'RUT'),
+                validator: (v) => (v == null || v.isEmpty) ? 'Campo requerido' : null,
               ),
               const SizedBox(height: 8),
               TextFormField(
@@ -128,8 +149,19 @@ class _RegisterAdminPageState extends State<RegisterAdminPage> {
               ),
               const SizedBox(height: 8),
               TextFormField(
+                controller: _emailCtrl,
+                decoration: const InputDecoration(labelText: 'Correo'),
+                keyboardType: TextInputType.emailAddress,
+                validator: (v) => (v == null || !v.contains('@')) ? 'Email inválido' : null,
+              ),
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 16),
+              const Text('Datos del Recinto', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
+              TextFormField(
                 controller: _condoNameCtrl,
-                decoration: const InputDecoration(labelText: 'Nombre del Condominio'),
+                decoration: const InputDecoration(labelText: 'Nombre del Condominio / Edificio'),
                 validator: (v) => (v == null || v.isEmpty) ? 'Campo requerido' : null,
               ),
               const SizedBox(height: 8),
@@ -152,7 +184,6 @@ class _RegisterAdminPageState extends State<RegisterAdminPage> {
                       setState(() => _selectedCondoTypeId = value);
                     },
                   ),
-              
               const SizedBox(height: 16),
               const Divider(),
               const SizedBox(height: 16),
@@ -182,7 +213,6 @@ class _RegisterAdminPageState extends State<RegisterAdminPage> {
                 label: Text(_isLoading ? 'Registrando...' : 'Registrar Condominio'),
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
               ),
-              
             ],
           ),
         ),

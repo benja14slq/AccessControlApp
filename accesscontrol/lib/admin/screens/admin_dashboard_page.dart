@@ -9,8 +9,12 @@ class AdminDashboardPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final adminUid = appState.adminState.adminUid;
+    final condominioId = appState.adminState.currentCondominioId;
     final db = FirebaseFirestore.instance;
+
+    if (condominioId == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -24,13 +28,13 @@ class AdminDashboardPage extends StatelessWidget {
             children: [
               _buildCountCard(
                 collection: db.collection('Residentes'),
-                adminUid: adminUid,
+                condominioId: condominioId,
                 label: 'Residentes',
               ),
               const SizedBox(width: 8),
               _buildCountCard(
                 collection: db.collection('Guardias'),
-                adminUid: adminUid,
+                condominioId: condominioId,
                 label: 'Guardias',
               ),
             ],
@@ -41,13 +45,13 @@ class AdminDashboardPage extends StatelessWidget {
             children: [
               _buildCountCard(
                 collection: db.collectionGroup('Vehiculos'), 
-                adminUid: adminUid,
+                condominioId: condominioId,
                 label: 'Vehículos Reg.',
               ),
               const SizedBox(width: 8),
               _buildCountCard(
                 collection: db.collection('Visitas'),
-                adminUid: adminUid,
+                condominioId: condominioId,
                 label: 'Visitas Prog.',
                 fieldFilters: [ 
                   Filter('status', isEqualTo: 'programada')
@@ -62,12 +66,12 @@ class AdminDashboardPage extends StatelessWidget {
 
   Widget _buildCountCard({
     required Query collection,
-    required String? adminUid,
+    required String? condominioId,
     required String label,
     List<Filter>? fieldFilters,
   }) {
 
-    Query query = collection.where('adminUid', isEqualTo: adminUid);
+    Query query = collection.where('condominioId', isEqualTo: condominioId);
 
     if (fieldFilters != null) {
       for (final filter in fieldFilters) {

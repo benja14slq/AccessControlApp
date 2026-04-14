@@ -136,7 +136,7 @@ class _RegisterGuardPageState extends State<RegisterGuardPage> {
             children: [
               TextFormField(
                 controller: _emailCtrl,
-                decoration: const InputDecoration(labelText: 'Correo (El que ingreso el Admin)'),
+                decoration: const InputDecoration(labelText: 'Correo (El que ingresó el Admin)'),
                 keyboardType: TextInputType.emailAddress,
                 enabled: !_isLoading && !_emailVerified,
               ),

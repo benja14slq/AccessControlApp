@@ -9,21 +9,21 @@ class GuardScannerPage extends StatefulWidget {
 }
 
 class _GuardScannerPageState extends State<GuardScannerPage> {
-
   final MobileScannerController _scannerController = MobileScannerController(
-    detectionSpeed: DetectionSpeed.normal,
+    // Volvemos a normal para que no retenga fotogramas en memoria
+    detectionSpeed: DetectionSpeed.normal, 
     facing: CameraFacing.back,
-    cameraResolution: const Size(1280, 720),
-    formats: [BarcodeFormat.qrCode]
+    formats: [BarcodeFormat.qrCode],
   );
-  bool _isScanCompleted = false;
+
+  bool _isProcessing = false;
 
   @override
-  void dispose(){
+  void dispose() {
     _scannerController.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -33,29 +33,74 @@ class _GuardScannerPageState extends State<GuardScannerPage> {
           MobileScanner(
             controller: _scannerController,
             onDetect: (capture) {
-              if (_isScanCompleted) return;
-              
-              final List<Barcode> barcodes = capture.barcodes;
-              if (barcodes.isNotEmpty){
-                final String code = barcodes.first.rawValue ?? "";
-                if (code.isNotEmpty){
-                  setState(() => _isScanCompleted = true);
-                  _scannerController.stop();
-                  Navigator.of(context).pop(code);
+              // 1. Si ya estamos procesando, rechazamos nuevas "cartas"
+              if (_isProcessing) return;
+
+              final barcodes = capture.barcodes;
+              if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
+                final code = barcodes.first.rawValue!;
+                if (code.isNotEmpty) {
+                  
+                  // 2. Bloqueamos la interfaz
+                  setState(() {
+                    _isProcessing = true;
+                  });
+
+                  // 3. LA MAGIA SALVADORA: 
+                  // Usamos Future.delayed para agendar el cierre de la pantalla
+                  // en el futuro (300ms). Esto permite que el bloque de código actual
+                  // termine de ejecutarse limpiamente.
+                  Future.delayed(const Duration(milliseconds: 300), () {
+                    if (mounted) {
+                      Navigator.of(context).pop(code);
+                    }
+                  });
+
+                  // 4. EL PASO CRÍTICO: Hacemos un 'return' inmediato.
+                  // Esto le dice a Android: "Ya terminé con este fotograma, libéralo".
+                  // Así evitamos el error de 'Unable to acquire a buffer item'.
+                  return;
                 }
               }
             },
           ),
+          
           Center(
             child: Container(
               width: 250,
               height: 250,
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.white, width: 2),
+                border: Border.all(
+                  color: _isProcessing ? Colors.green : Colors.white, 
+                  width: 3
+                ),
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
           ),
+          
+          if (_isProcessing)
+            Container(
+              color: Colors.black87,
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.green),
+                    SizedBox(height: 24),
+                    Text(
+                      '¡Pase detectado!',
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Retire el pase de la cámara...',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            )
         ],
       ),
     );

@@ -25,6 +25,11 @@ class _RegisterResidentPageState extends State<RegisterResidentPage> {
 
   @override
   void dispose() {
+    _emailCtrl.dispose();
+    _nameCtrl.dispose();
+    _lastNameCtrl.dispose();
+    _passCtrl.dispose();
+    _confirmPassCtrl.dispose();
     super.dispose();
   }
 
@@ -78,30 +83,31 @@ class _RegisterResidentPageState extends State<RegisterResidentPage> {
 
     try {
       final invitationData = _pendingResidentDoc!.data() as Map<String, dynamic>;
-      final adminUid = invitationData['adminUid'];
+      final condominioId = invitationData['condominioId'];
 
-      final adminDoc = await FirebaseFirestore.instance
-          .collection('Administradores')
-          .doc(adminUid)
-          .get();
-      
-      if (!adminDoc.exists) {
-        throw Exception('Error: El administrador que te invitó no fue encontrado.');
+      if (condominioId == null){
+        throw Exception('Error: La invitación no tiene un condomino asociado. Contacte a su administrador.');
       }
-      final adminData = adminDoc.data()!;
+
+      final condoDoc = await FirebaseFirestore.instance
+        .collection('Condominios')
+        .doc(condominioId)
+        .get();
+
+      if (!condoDoc.exists) {
+        throw Exception('Error: El condominio asociado ya no existe en el sistema.');
+      }
 
       UserCredential credential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
-              email: invitationData['correo'], 
-              password: _passCtrl.text.trim()
-            );
+        .createUserWithEmailAndPassword(
+          email: invitationData['correo'], 
+          password: _passCtrl.text.trim()
+          );
       
       final residentUid = credential.user!.uid;
 
       await _pendingResidentDoc!.reference.update({
         'uid': residentUid,
-        'nombreCondominio': adminData['nombreCondominio'],
-        'tipoCondominioId': adminData['tipoCondominioId'],
         'estado': 'Registrado',
       });
 
@@ -109,17 +115,29 @@ class _RegisterResidentPageState extends State<RegisterResidentPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('¡Cuenta activada con éxito! Ya puedes iniciar sesión.'))
         );
-        Navigator.of(context).pop(); 
+        Navigator.of(context).pop();
       }
 
+    } on FirebaseAuthException catch (e) {
+      String errorMsg = 'Ocurrio un error. Intenta de nuevo.';
+      if (e.code == 'weak-password'){
+        errorMsg = 'La contraseña es muy debil.';
+      } else if (e.code == 'email-already-in-use') {
+        errorMsg = 'El correo ya se encuentra registrado.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMsg), backgroundColor: Colors.red)
+      );
     } catch (e) {
-
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red)
+      );
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
-  }
+  } 
 
   @override
   Widget build(BuildContext context) {

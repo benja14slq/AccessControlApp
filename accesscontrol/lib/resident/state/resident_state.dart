@@ -17,7 +17,7 @@ class ResidentState extends ChangeNotifier {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   late final DocumentReference _residentDocRef;
 
-  late String _adminUid;
+  late String _condominioId; // CAMBIO
 
   final List<StreamSubscription> _subscriptions = [];
   List<FamilyMember> familyMembers = [];
@@ -89,20 +89,26 @@ class ResidentState extends ChangeNotifier {
   Future<void> _loadProfile() async {
     final completer = Completer<void>();
     final sub = _residentDocRef.snapshots().listen(
-      (doc) {
+      (doc) async {
         if (doc.exists) {
           final data = doc.data() as Map<String, dynamic>;
-          _adminUid = data['adminUid'];
+          _condominioId = data['condominioId']; // CAMBIO
           residentEmail = data['correo'] ?? '';
           residentName = data['nombre'] ?? '';
           residentLastName = data['apellido'] ?? '';
-          condoName = data['nombreCondominio'] ?? '';
           hasFaceId = data['hasFaceId'] ?? false;
           notifEmail = data['notifEmail'] ?? true;
           notifApp = data['notifApp'] ?? true;
           final torre = data['torre'] != null ? 'Torre ${data['torre']}' : '';
           final numero = data['numero'] ?? '';
           condoUnit = '$torre $numero'.trim();
+          
+          // CAMBIO: Obtenemos el nombre del condominio desde su propia colección
+          final condoDoc = await _db.collection('Condominios').doc(_condominioId).get();
+          if(condoDoc.exists) {
+            condoName = condoDoc.data()?['nombreCondominio'] ?? '';
+          }
+
           notifyListeners();
           if (!completer.isCompleted) completer.complete();
         }
@@ -118,11 +124,12 @@ class ResidentState extends ChangeNotifier {
 
   Future<void> _loadConfig() {
     final completer = Completer<void>();
-    final sub = _db.collection('Administradores').doc(_adminUid).snapshots().listen(
-      (adminDoc) {
+    // CAMBIO: Leemos la configuración desde 'Condominios'
+    final sub = _db.collection('Condominios').doc(_condominioId).snapshots().listen(
+      (condoDoc) {
         if (!completer.isCompleted) completer.complete();
-        if (adminDoc.exists) {
-          condoConfig = adminDoc.data()?['configuracion'] ?? {};
+        if (condoDoc.exists) {
+          condoConfig = condoDoc.data()?['configuracion'] ?? {};
           notifyListeners();
         }
       },
@@ -168,13 +175,14 @@ class ResidentState extends ChangeNotifier {
           return VisitPass(
             id: doc.id,
             code: data['code'] ?? 'Error',
+            condominioId: data['condominioId'] ?? '',
+            residentUid: data['residentUid'] ?? '',
             visitorName: data['visitorName'] ?? '',
             visitorLastName: data['visitorLastName'] ?? '',
             visitorId: data['visitorId'],
             phone: data['phone'],
             plate: data['plate'],
             scheduledAt: (data['scheduledAt'] as Timestamp).toDate(),
-            hostResident: '$residentName $residentLastName',
             status: VisitStatus.programada, 
           );
         }).toList();
@@ -266,7 +274,7 @@ class ResidentState extends ChangeNotifier {
         'plate': cleanPlate,
         'alias': alias,
         'createdAt': FieldValue.serverTimestamp(),
-        'adminUid': _adminUid,
+        'condominioId': _condominioId, // CAMBIO
       });
     } catch (e) {
       print("Error al añadir vehículo: $e");
@@ -295,7 +303,7 @@ class ResidentState extends ChangeNotifier {
     try {
       final newCode = mkCode();
       await _db.collection('Visitas').add({
-        'adminUid': _adminUid, 
+        'condominioId': _condominioId, // CAMBIO
         'residentUid': uid,
         'visitorName': visitorName,
         'visitorLastName': visitorLastName,
@@ -326,7 +334,7 @@ class ResidentState extends ChangeNotifier {
         'rut': rut,
         'hasFaceId': false,
         'createdAt': FieldValue.serverTimestamp(),
-        'adminUid': _adminUid,
+        'condominioId': _condominioId, // CAMBIO
       });
     } catch (e) {
       print('Error al añadir miembro familiar: $e');

@@ -1,6 +1,5 @@
 import 'package:accesscontrol/state/app_state.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class AdminResidentsPage extends StatefulWidget {
@@ -104,11 +103,20 @@ class _AdminResidentsPageState extends State<AdminResidentsPage> {
     final apellido = _apellidoCtrl.text.trim();
     final numero = _numeroCtrl.text.trim();
     final torre = _torreCtrl.text.trim();
-    final adminUid = FirebaseAuth.instance.currentUser?.uid;
+    
+    // CAMBIO CLAVE: Tomamos el condominioId
+    final condominioId = widget.appState.adminState.currentCondominioId;
 
     if (email.isEmpty || nombre.isEmpty || apellido.isEmpty || numero.isEmpty || (isEdificio && torre.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
          const SnackBar(content: Text('Por favor, completa todos los campos.'))
+      );
+      return;
+    }
+
+    if (condominioId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+         const SnackBar(content: Text('Error: No se ha detectado el condominio actual.'))
       );
       return;
     }
@@ -131,8 +139,10 @@ class _AdminResidentsPageState extends State<AdminResidentsPage> {
           }
           return; 
       }
+      
+      // CAMBIO CLAVE: Guardamos solo la estructura limpia
       final Map<String, dynamic> residentData = {
-        'adminUid': adminUid,
+        'condominioId': condominioId, // Nueva relación
         'correo': email,
         'nombre': nombre,
         'apellido': apellido,
@@ -142,8 +152,6 @@ class _AdminResidentsPageState extends State<AdminResidentsPage> {
         'numero': numero,
         'torre': isEdificio ? torre : null,
         'uid': null, 
-        'nombreCondominio': null,
-        'tipoCondominioId': null,
       };
 
       await FirebaseFirestore.instance.collection('Residentes').add(residentData);
@@ -167,13 +175,18 @@ class _AdminResidentsPageState extends State<AdminResidentsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final adminUid = FirebaseAuth.instance.currentUser?.uid;
+    // CAMBIO CLAVE: Filtramos por condominioId
+    final condominioId = widget.appState.adminState.currentCondominioId;
+
+    if (condominioId == null) {
+      return const Center(child: Text('Cargando condominio...'));
+    }
 
     return Scaffold(
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('Residentes')
-            .where('adminUid', isEqualTo: adminUid)
+            .where('condominioId', isEqualTo: condominioId) // CAMBIO
             .orderBy('createdAt', descending: true)
             .snapshots(),
         
@@ -198,7 +211,7 @@ class _AdminResidentsPageState extends State<AdminResidentsPage> {
               final data = residents[i].data() as Map<String, dynamic>;
               
               final String subtitle = 
-                  data['torre'] != null
+                  data['torre'] != null && data['torre'].toString().isNotEmpty
                   ? 'Torre ${data['torre']} - ${data['numero']}' 
                   : 'Nº ${data['numero']}';
               

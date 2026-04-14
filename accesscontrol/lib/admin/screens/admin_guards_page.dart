@@ -1,6 +1,5 @@
 import 'package:accesscontrol/state/app_state.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class AdminGuardsPage extends StatefulWidget {
@@ -71,12 +70,20 @@ class _AdminGuardsPageState extends State<AdminGuardsPage> {
     final email = _emailCtrl.text.trim();
     final nombre = _nombreCtrl.text.trim();
     final apellido = _apellidoCtrl.text.trim();
-    final adminUid = FirebaseAuth.instance.currentUser?.uid;
-    final adminCondoName = widget.appState.adminState.adminCondoName;
+    
+    // CAMBIO CLAVE: Obtenemos el condominioId desde el estado
+    final condominioId = widget.appState.adminState.currentCondominioId;
 
     if (email.isEmpty || nombre.isEmpty || apellido.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
          const SnackBar(content: Text('Por favor, completa todos los campos.'))
+      );
+      return;
+    }
+
+    if (condominioId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+         const SnackBar(content: Text('Error: No se ha detectado el condominio actual.'))
       );
       return;
     }
@@ -100,15 +107,15 @@ class _AdminGuardsPageState extends State<AdminGuardsPage> {
           return;
       }
 
+      // CAMBIO CLAVE: Guardamos solo la estructura limpia de NoSQL
       final Map<String, dynamic> guardData = {
-        'adminUid': adminUid,
+        'condominioId': condominioId, // Nueva relación
         'correo': email,
         'nombre': nombre,
         'apellido': apellido,
         'estado': 'Pendiente',
         'rol': 'Guardia',
         'createdAt': FieldValue.serverTimestamp(),
-        'nombreCondominio': adminCondoName,
         'uid': null, 
       };
 
@@ -149,13 +156,17 @@ class _AdminGuardsPageState extends State<AdminGuardsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final adminUid = FirebaseAuth.instance.currentUser?.uid;
+    final condominioId = widget.appState.adminState.currentCondominioId;
+
+    if (condominioId == null) {
+      return const Center(child: Text('Cargando condominio...'));
+    }
 
     return Scaffold(
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('Guardias')
-            .where('adminUid', isEqualTo: adminUid)
+            .where('condominioId', isEqualTo: condominioId) // CAMBIO
             .orderBy('createdAt', descending: true)
             .snapshots(),
         
