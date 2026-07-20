@@ -1,6 +1,6 @@
 import 'package:accesscontrol/guard/state/guard_state.dart';
 import 'package:accesscontrol/shared/utils.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 class GuardEventsPage extends StatefulWidget {
@@ -24,21 +24,20 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
 
   Future<void> _loadResidentFilters() async {
     // CAMBIO: Ahora obtenemos el condominioId desde el estado
-    final condominioId = widget.state.condominioId; 
+    final condominioId = widget.state.condominioId;
 
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('Residentes')
           .where('condominioId', isEqualTo: condominioId) // CAMBIO
-          .where('estado', isEqualTo: 'Registrado') 
+          .where('estado', isEqualTo: 'Registrado')
           .orderBy('nombre')
           .get();
-      
+
       setState(() {
         _residents = snapshot.docs;
         _isLoadingResidents = false;
       });
-
     } catch (e) {
       print("Error cargando residentes: $e");
       setState(() => _isLoadingResidents = false);
@@ -47,7 +46,6 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
 
   @override
   Widget build(BuildContext context) {
-
     // CAMBIO: Filtramos los eventos por condominioId
     Query query = FirebaseFirestore.instance
         .collection('Eventos')
@@ -69,36 +67,48 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
                 child: DropdownButton<String>(
                   isExpanded: true,
                   value: _selectedResidentUid,
-                  hint: Text(_isLoadingResidents ? 'Cargando...' : 'Filtrar por Residente'),
-                  onChanged: (value) => setState(() => _selectedResidentUid = value),
+                  hint: Text(
+                    _isLoadingResidents
+                        ? 'Cargando...'
+                        : 'Filtrar por Residente',
+                  ),
+                  onChanged: (value) =>
+                      setState(() => _selectedResidentUid = value),
                   items: _residents.map((doc) {
                     final data = doc.data() as Map<String, dynamic>;
                     String torre = data['torre'] ?? '';
                     String numero = data['numero'] ?? '';
-                    String unit = (torre.isNotEmpty ? 'Torre $torre - ' : 'Nº ') + numero;
+                    String unit =
+                        (torre.isNotEmpty ? 'Torre $torre - ' : 'Nº ') + numero;
                     String name = '${data['nombre']} ${data['apellido']}';
-                    
+
                     return DropdownMenuItem<String>(
                       value: data['uid'],
-                      child: Text('$name ($unit)', overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        '$name ($unit)',
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     );
                   }).toList(),
-                  selectedItemBuilder: (context) => _residents
-                    .where((doc) => doc['uid'] == _selectedResidentUid)
-                    .map((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      String torre = data['torre'] ?? '';
-                      String numero = data['numero'] ?? '';
-                      String unit = (torre.isNotEmpty ? 'Torre $torre - ' : 'Nº ') + numero;
-                      String name = '${data['nombre']} ${data['apellido']}';
-                      return Text('$name ($unit)', overflow: TextOverflow.ellipsis);
-                    }).toList(),
+                  selectedItemBuilder: (context) => _residents.map((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    String torre = data['torre'] ?? '';
+                    String numero = data['numero'] ?? '';
+                    String unit =
+                        (torre.isNotEmpty ? 'Torre $torre - ' : 'Nº ') + numero;
+                    String name = '${data['nombre']} ${data['apellido']}';
+
+                    return Text(
+                      '$name ($unit)',
+                      overflow: TextOverflow.ellipsis,
+                    );
+                  }).toList(),
                 ),
               ),
               if (_selectedResidentUid != null)
                 IconButton(
-                  icon: const Icon(Icons.clear), 
-                  onPressed: () => setState(() => _selectedResidentUid = null)
+                  icon: const Icon(Icons.clear),
+                  onPressed: () => setState(() => _selectedResidentUid = null),
                 ),
             ],
           ),
@@ -129,32 +139,100 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
               final events = snapshot.data!.docs;
 
               return ListView.separated(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 itemCount: events.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (context, i) {
                   final data = events[i].data() as Map<String, dynamic>;
-                  final status = data['status'] ?? 'desconocido';
+                  final rawStatus = data['status'] ?? 'desconocido';
 
                   IconData icon = Icons.info_outline;
                   Color color = Colors.blueGrey;
-                  if (status.contains('autorizada')){
+                  if (rawStatus.contains('autorizada')) {
                     icon = Icons.check_circle_outline;
                     color = Colors.green;
-                  } else if (status.contains('rechazada')){
+                  } else if (rawStatus.contains('rechazada')) {
                     icon = Icons.cancel_outlined;
                     color = Colors.red;
-                  } else if (status.contains('manual')){
+                  } else if (rawStatus.contains('manual')) {
                     icon = Icons.key_outlined;
                     color = Colors.orange;
                   }
 
+                  String statusText = 'Desconocido';
+                  switch (rawStatus) {
+                    case 'autorizada_qr':
+                      statusText = 'Autorizado (Pase QR)';
+                      break;
+                    case 'rechazada_qr':
+                      statusText = 'Rechazado (Pase QR)';
+                      break;
+                    case 'autorizada_facial':
+                      statusText = 'Autorizado (Biometría)';
+                      break;
+                    case 'rechazada_facial':
+                      statusText = 'Rechazado (Biometría)';
+                      break;
+                    case 'autorizada_lpr':
+                      statusText = 'Autorizado (Patente)';
+                      break;
+                    case 'rechazada_lpr':
+                      statusText = 'Rechazado (Patente)';
+                      break;
+                    case 'autorizada_manual':
+                      statusText = 'Ingreso Manual Registrado';
+                      break;
+                  }
+
+                  final String residentInfo = data['residentName'] != null
+                      ? 'Residente: ${data['residentName']}'
+                      : '';
+
                   return Card(
-                    child: ListTile(
-                      leading: Icon(icon, color: color),
-                      title: Text(data['description']),
-                      subtitle: Text(formatCompact((data['timestamp'] as Timestamp).toDate())),
-                      isThreeLine: data['description'].contains('\n'),
+                    elevation: 1,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: color.withOpacity(0.1),
+                          child: Icon(icon, color: color),
+                        ),
+                        title: Text(
+                          data['description'] ?? 'Evento sin descripción',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.symmetric(),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '$statusText • Hace ${formatCompact((data['timestamp'] as Timestamp).toDate())}',
+                                style: TextStyle(
+                                  color: color,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              if (residentInfo.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  residentInfo,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        isThreeLine: residentInfo.isNotEmpty,
+                      ),
                     ),
                   );
                 },
