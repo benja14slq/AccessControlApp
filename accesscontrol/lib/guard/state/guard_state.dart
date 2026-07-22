@@ -411,8 +411,14 @@ class GuardState extends ChangeNotifier {
         'checkedAt': FieldValue.serverTimestamp(),
       });
 
+      final vName = visitData['visitorName'] ?? '';
+      final vLastName = visitData['visitorLastName'] ?? '';
+      final vId = visitData['visitorId'] ?? '';
+
+      final description = 'Ingreso QR: $vName $vLastName $vId'.trim();
+
       await _logEvent(
-        description: 'Ingreso QR: ${visitData['visitorName']} (Pase: $code)',
+        description: description,
         status: 'autorizada_qr',
         residentUid: residentUid,
         residentName: residentName,
@@ -420,7 +426,7 @@ class GuardState extends ChangeNotifier {
         residentUnit: residentUnit,
       );
 
-      return 'PASE AUTORIZADO:\n${visitData['visitorName']}';
+      return 'PASE AUTORIZADO:\n$vName $vLastName';
     } catch (e) {
       await _logEvent(
         description: 'QR rechazado: $code',
@@ -476,6 +482,23 @@ class GuardState extends ChangeNotifier {
     } catch (e) {
       return {'status': 'error', 'message': e.toString()};
     }
+  }
+
+  Future<void> logApprovedVisit({
+    required String visitorName,
+    required String residentName,
+    required String residentUid,
+    String? torre,
+    String? numero,
+  }) async {
+    await _logEvent(
+      description: 'Ingreso de $visitorName aprobado por $residentName.',
+      status: 'autorizada_notificacion',
+      residentUid: residentUid,
+      residentName: residentName,
+      residentTower: torre,
+      residentUnit: numero,
+    );
   }
 
   Future<void> _logEvent({
