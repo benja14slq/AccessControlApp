@@ -10,8 +10,6 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
-// 🚀 FUNCIÓN AISLADA (ISOLATE): Procesa la imagen en un núcleo secundario del procesador
-// Esto evita que la pantalla se congele al procesar fotos de alta resolución.
 String _processImageToBase64(String path) {
   final bytes = File(path).readAsBytesSync();
   return base64Encode(bytes);
@@ -25,6 +23,9 @@ class GuardState extends ChangeNotifier {
 
   String? _condominioId;
   String? _guardFullName;
+
+  DateTime _selectedDate = DateTime.now();
+  DateTime get selectedDate => _selectedDate;
 
   final List<StreamSubscription> _subscriptions = [];
 
@@ -62,7 +63,7 @@ class GuardState extends ChangeNotifier {
       _guardFullName = '${guardData['nombre']} ${guardData['apellido']}';
 
       if (_condominioId != null) {
-        _loadEvents();
+        loadEventsByDate(DateTime.now());
         _loadConfig();
         await _loadResidentsForDropdowns();
       }
@@ -105,13 +106,35 @@ class GuardState extends ChangeNotifier {
     }
   }
 
-  void _loadEvents() {
+  void loadEventsByDate(DateTime date) {
     if (_condominioId == null) return;
+    _selectedDate = date;
+
+    // Limpiamos los eventos anteriores mientras carga
+    events = [];
+    notifyListeners();
+
+    // Calculamos el inicio y fin del día seleccionado
+    final startOfDay = DateTime(date.year, date.month, date.day, 0, 0, 0);
+    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+
+    // Cancelamos la suscripción anterior para no dejar procesos fantasmas (cobran dinero)
+    if (_subscriptions.isNotEmpty) {
+      _subscriptions.last.cancel();
+      _subscriptions.removeLast();
+    }
+
+    // Consulta optimizada a Firebase
     final sub = _db
         .collection('Eventos')
         .where('condominioId', isEqualTo: _condominioId)
+        .where(
+          'timestamp',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+        )
+        .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
         .orderBy('timestamp', descending: true)
-        .limit(50)
+        .limit(100) // Limite de seguridad
         .snapshots()
         .listen((snapshot) {
           events = snapshot.docs
@@ -119,6 +142,7 @@ class GuardState extends ChangeNotifier {
               .toList();
           notifyListeners();
         });
+
     _subscriptions.add(sub);
   }
 
@@ -145,35 +169,53 @@ class GuardState extends ChangeNotifier {
     if (_condominioId == null) throw Exception("Error de inicialización.");
 
     try {
+      try {
+        // 1. EL SECRETO: Añadimos un ".timeout". Si en 3 segundos no hay red, salta el error de inmediato.
+        final result = await InternetAddress.lookup(
+          'google.com',
+        ).timeout(const Duration(seconds: 3));
+
+        if (result.isEmpty || result[0].rawAddress.isEmpty) {
+          throw const SocketException('Sin conexión');
+        }
+      } on TimeoutException catch (_) {
+        throw Exception(
+          'Sin conexión a Internet. La biometría facial requiere acceso a la nube (AWS).',
+        );
+      } on SocketException catch (_) {
+        throw Exception(
+          'Sin conexión a Internet. La biometría facial requiere acceso a la nube (AWS).',
+        );
+      }
+
       final ImagePicker picker = ImagePicker();
       final XFile? photo = await picker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.front,
-        imageQuality: 85, // Calidad alta
-        maxWidth:
-            1920, // Resolución Full HD (Suficiente para AWS, evita crashear la RAM)
+        imageQuality: 85,
+        maxWidth: 1920,
       );
 
       if (photo == null) throw Exception('Captura cancelada.');
 
-      // ⏱️ TIEMPO DE RESPIRACIÓN: Esperamos que la cámara nativa se cierre por completo
       await Future.delayed(const Duration(milliseconds: 600));
       PaintingBinding.instance.imageCache.clear();
       PaintingBinding.instance.imageCache.clearLiveImages();
 
-      // 🚀 ISOLATE: Convertimos la imagen pesada en segundo plano
       final String base64Image = await compute(
         _processImageToBase64,
         photo.path,
       );
 
-      // LLAMADA A AWS
+      // LLAMADA A AWS (También le ponemos timeout de 15 segs por si la red es muy lenta)
       final Uri verifyUrl = Uri.parse('$apiGatewayUrl/verify');
-      final response = await http.post(
-        verifyUrl,
-        headers: {'Content-Type': 'application/json', 'x-api-key': apiKey},
-        body: jsonEncode({'imageBase64': base64Image}),
-      );
+      final response = await http
+          .post(
+            verifyUrl,
+            headers: {'Content-Type': 'application/json', 'x-api-key': apiKey},
+            body: jsonEncode({'imageBase64': base64Image}),
+          )
+          .timeout(const Duration(seconds: 15));
 
       print(
         "RESPUESTA DE AWS (Verificación): ${response.statusCode} - ${response.body}",
@@ -185,8 +227,9 @@ class GuardState extends ChangeNotifier {
       }
 
       final data = jsonDecode(response.body);
-      if (data['match'] == false || data['faceId'] == null)
+      if (data['match'] == false || data['faceId'] == null) {
         throw Exception('ROSTRO NO RECONOCIDO.');
+      }
 
       final String faceId = data['faceId'];
       final double similarity = data['similarity'];
@@ -220,8 +263,9 @@ class GuardState extends ChangeNotifier {
         }
       }
 
-      if (docEncontrado == null || residentRef == null)
+      if (docEncontrado == null || residentRef == null) {
         throw Exception('Rostro no asociado a residente.');
+      }
 
       final personData = docEncontrado.data() as Map<String, dynamic>;
       final String personName =
@@ -251,16 +295,23 @@ class GuardState extends ChangeNotifier {
         'message': 'ACCESO AUTORIZADO:\n$personName ($tipoMiembro)\n$unit',
       };
     } catch (e) {
-      await _logEvent(
-        description: 'Ingreso facial rechazado: ${e.toString()}',
-        status: 'rechazada_facial',
-      );
-      return {
-        'success': false,
-        'message': e.toString().contains('Exception:')
-            ? e.toString().split(': ')[1]
-            : e.toString(),
-      };
+      // Limpiamos el mensaje de error para que se vea estético
+      String errorMessage = e.toString();
+      if (errorMessage.startsWith('Exception: ')) {
+        errorMessage = errorMessage.substring(11);
+      }
+
+      // 2. EVITAMOS EL CONGELAMIENTO EN FIREBASE:
+      // Si el error es de conexión o se canceló, NO lo guardamos en la bitácora.
+      if (!errorMessage.contains('Sin conexión') &&
+          !errorMessage.contains('Captura cancelada')) {
+        await _logEvent(
+          description: 'Ingreso facial rechazado: $errorMessage',
+          status: 'rechazada_facial',
+        );
+      }
+
+      return {'success': false, 'message': errorMessage};
     }
   }
 

@@ -2,6 +2,7 @@ import 'package:accesscontrol/guard/state/guard_state.dart';
 import 'package:accesscontrol/shared/utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class GuardEventsPage extends StatefulWidget {
   const GuardEventsPage({super.key, required this.state});
@@ -15,6 +16,7 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
   String? _selectedResidentUid;
   List<QueryDocumentSnapshot> _residents = [];
   bool _isLoadingResidents = true;
+  DateTime _selectedDate = DateTime.now();
 
   @override
   void initState() {
@@ -46,12 +48,33 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // CAMBIO: Filtramos los eventos por condominioId
+    final startOfDay = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      0,
+      0,
+      0,
+    );
+    final endOfDay = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      23,
+      59,
+      59,
+    );
+
     Query query = FirebaseFirestore.instance
         .collection('Eventos')
-        .where('condominioId', isEqualTo: widget.state.condominioId) // CAMBIO
+        .where('condominioId', isEqualTo: widget.state.condominioId)
+        .where(
+          'timestamp',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+        )
+        .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
         .orderBy('timestamp', descending: true)
-        .limit(50);
+        .limit(100);
 
     if (_selectedResidentUid != null) {
       query = query.where('residentUid', isEqualTo: _selectedResidentUid);
@@ -60,7 +83,40 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Eventos del: ${DateFormat('dd/MM/yyyy').format(_selectedDate)}",
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                  color: Colors.indigo,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.calendar_month, color: Colors.indigo),
+                onPressed: () async {
+                  final DateTime? picked = await showDatePicker(
+                    context: context,
+                    initialDate: _selectedDate,
+                    firstDate: DateTime(2023),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null && picked != _selectedDate) {
+                    setState(() {
+                      _selectedDate = picked;
+                    });
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
           child: Row(
             children: [
               Expanded(
@@ -130,7 +186,7 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
               if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                 return const Center(
                   child: Text(
-                    'No hay eventos registrados.',
+                    'No hay eventos en este día.',
                     style: TextStyle(color: Colors.grey),
                   ),
                 );
@@ -160,6 +216,9 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
                   } else if (rawStatus.contains('manual')) {
                     icon = Icons.key_outlined;
                     color = Colors.orange;
+                  } else if (rawStatus.contains('notificacion')) {
+                    icon = Icons.notifications_active;
+                    color = Colors.blue;
                   }
 
                   String statusText = 'Desconocido';
@@ -184,6 +243,9 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
                       break;
                     case 'autorizada_manual':
                       statusText = 'Ingreso Manual Registrado';
+                      break;
+                    case 'autorizada_notificacion':
+                      statusText = 'Autorizado por Residente';
                       break;
                   }
 
@@ -211,7 +273,8 @@ class _GuardEventsPageState extends State<GuardEventsPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '$statusText • Hace ${formatCompact((data['timestamp'] as Timestamp).toDate())}',
+                                // Se cambia "Hace X tiempo" por la hora exacta (ej. 14:30)
+                                '$statusText • ${DateFormat('HH:mm').format((data['timestamp'] as Timestamp).toDate())} hrs',
                                 style: TextStyle(
                                   color: color,
                                   fontWeight: FontWeight.bold,
