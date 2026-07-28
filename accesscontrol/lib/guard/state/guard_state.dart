@@ -316,28 +316,27 @@ class GuardState extends ChangeNotifier {
   }
 
   // ==========================================
-  // VERIFICACIÓN LPR PATENTE (OPTIMIZADA)
+  // VERIFICACIÓN LPR PATENTE (OFFLINE-FIRST INSTANTÁNEO)
   // ==========================================
   Future<Map<String, dynamic>> verifyPlateByLPR() async {
     if (_condominioId == null) throw Exception("Error de inicialización");
     String recognizedPlate = '';
 
     try {
+      // 1. CAPTURA Y PROCESAMIENTO (Edge Computing - 100% Local en el teléfono)
       final ImagePicker picker = ImagePicker();
       final XFile? photo = await picker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.rear,
         imageQuality: 85,
-        maxWidth: 1920, // Resolución alta para leer patente clara
+        maxWidth: 1920,
       );
       if (photo == null) throw Exception('Captura cancelada.');
 
-      // ⏱️ TIEMPO DE RESPIRACIÓN
       await Future.delayed(const Duration(milliseconds: 600));
       PaintingBinding.instance.imageCache.clear();
       PaintingBinding.instance.imageCache.clearLiveImages();
 
-      // PROCESAMIENTO ML KIT
       final inputImage = InputImage.fromFilePath(photo.path);
       final textRecognizer = TextRecognizer();
       final RecognizedText recognizedText = await textRecognizer.processImage(
@@ -345,9 +344,7 @@ class GuardState extends ChangeNotifier {
       );
 
       String bestMatch = '';
-      final regex = RegExp(
-        r'^[A-Z]{2}[A-Z0-9]{2}[0-9]{2}$',
-      ); // Regex Patente Chilena
+      final regex = RegExp(r'^[A-Z]{2}[A-Z0-9]{2}[0-9]{2}$');
 
       for (TextBlock block in recognizedText.blocks) {
         String text = block.text.toUpperCase().replaceAll(
@@ -358,7 +355,7 @@ class GuardState extends ChangeNotifier {
           bestMatch = text;
           break;
         } else if (text.length == 6) {
-          bestMatch = text; // Fallback
+          bestMatch = text;
         }
       }
       textRecognizer.close();
@@ -367,32 +364,76 @@ class GuardState extends ChangeNotifier {
         throw Exception('No se pudo leer una patente válida.');
       recognizedPlate = bestMatch;
 
-      // BÚSQUEDA FIRESTORE
-      final vehicleQuery = await _db
-          .collectionGroup('Vehiculos')
-          .where('condominioId', isEqualTo: _condominioId)
-          .where('plate', isEqualTo: recognizedPlate)
-          .limit(1)
-          .get();
+      DocumentSnapshot? vehicleDoc;
+      bool loadedFromCache = false;
 
-      if (vehicleQuery.docs.isEmpty)
+      // 2. BÚSQUEDA INSTANTÁNEA EN CACHÉ LOCAL
+      try {
+        final cacheQuery = await _db
+            .collectionGroup('Vehiculos')
+            .where('condominioId', isEqualTo: _condominioId)
+            .where('plate', isEqualTo: recognizedPlate)
+            .limit(1)
+            .get(const GetOptions(source: Source.cache));
+
+        if (cacheQuery.docs.isNotEmpty) {
+          vehicleDoc = cacheQuery.docs.first;
+          loadedFromCache = true;
+        }
+      } catch (_) {}
+
+      // 3. SI NO ESTÁ EN CACHÉ, BUSCAMOS EN EL SERVIDOR (Timeout corto)
+      if (vehicleDoc == null) {
+        try {
+          final serverQuery = await _db
+              .collectionGroup('Vehiculos')
+              .where('condominioId', isEqualTo: _condominioId)
+              .where('plate', isEqualTo: recognizedPlate)
+              .limit(1)
+              .get(const GetOptions(source: Source.serverAndCache))
+              .timeout(const Duration(seconds: 3));
+
+          if (serverQuery.docs.isNotEmpty) {
+            vehicleDoc = serverQuery.docs.first;
+          }
+        } catch (_) {
+          throw Exception(
+            'Sin conexión y la patente no se encuentra en el caché local.',
+          );
+        }
+      }
+
+      if (vehicleDoc == null) {
         throw Exception('PATENTE NO REGISTRADA: $recognizedPlate');
+      }
 
-      final vehicleDoc = vehicleQuery.docs.first;
       final residentRef = vehicleDoc.reference.parent.parent;
-
       if (residentRef == null) throw Exception('Vehículo sin residente.');
-      final residentDoc = await residentRef.get();
-      final residentData = residentDoc.data() as Map<String, dynamic>;
 
+      DocumentSnapshot? residentDoc;
+      try {
+        residentDoc = await residentRef.get(
+          const GetOptions(source: Source.cache),
+        );
+      } catch (_) {
+        residentDoc = await residentRef
+            .get(const GetOptions(source: Source.serverAndCache))
+            .timeout(const Duration(seconds: 3));
+      }
+
+      if (!residentDoc.exists) throw Exception('Residente no encontrado.');
+
+      final residentData = residentDoc.data() as Map<String, dynamic>;
       final String residentName =
           '${residentData['nombre']} ${residentData['apellido']}';
       final String unit = residentData['torre'] != null
           ? 'Torre ${residentData['torre']} - ${residentData['numero']}'
           : 'Nº ${residentData['numero']}';
 
-      await _logEvent(
-        description: 'Ingreso LPR: $residentName (Patente: $recognizedPlate)',
+      // 4. REGISTRO EN BITÁCORA LOCAL INSTANTÁNEO
+      _logEvent(
+        description:
+            'Ingreso LPR: $residentName (Patente: $recognizedPlate) ${loadedFromCache ? "[OFFLINE]" : ""}',
         status: 'autorizada_lpr',
         residentUid: residentData['uid'],
         residentName: residentName,
@@ -403,45 +444,101 @@ class GuardState extends ChangeNotifier {
       return {
         'success': true,
         'message':
-            'ACCESO AUTORIZADO:\n$residentName\n$unit (Patente: $recognizedPlate)',
+            'ACCESO AUTORIZADO ${loadedFromCache ? "(Offline)" : ""}:\n$residentName\n$unit (Patente: $recognizedPlate)',
       };
     } catch (e) {
-      await _logEvent(
-        description: 'Rechazo LPR: ${e.toString()} ($recognizedPlate)',
-        status: 'rechazada_lpr',
-      );
-      return {
-        'success': false,
-        'message': e.toString().contains('Exception:')
-            ? e.toString().split(': ')[1]
-            : e.toString(),
-      };
+      String errorMessage = e.toString().contains('Exception:')
+          ? e.toString().split('Exception: ')[1].trim()
+          : e.toString();
+
+      if (!errorMessage.contains('Captura cancelada')) {
+        _logEvent(
+          description: 'Rechazo LPR: $errorMessage ($recognizedPlate)',
+          status: 'rechazada_lpr',
+        );
+      }
+
+      return {'success': false, 'message': errorMessage};
     }
   }
 
   // ==========================================
-  // VERIFICACIÓN QR Y EXTRAS
+  // VERIFICACIÓN QR (OFFLINE-FIRST INSTANTÁNEO)
   // ==========================================
   Future<String> verifyPass(String code) async {
     if (_condominioId == null) throw Exception("Error de inicialización");
 
     try {
-      final query = await _db
-          .collection('Visitas')
-          .where('condominioId', isEqualTo: _condominioId)
-          .where('code', isEqualTo: code)
-          .where('status', isEqualTo: 'programada')
-          .where('scheduledAt', isGreaterThan: Timestamp.now())
-          .limit(1)
-          .get();
+      DocumentSnapshot? visitDoc;
+      Map<String, dynamic>? visitData;
+      bool loadedFromCache = false;
 
-      if (query.docs.isEmpty)
-        throw Exception('Pase expirado, inválido o de otro condominio.');
+      // 1. ESTRATEGIA INSTANTÁNEA: Intentamos buscar PRIMERO en el Caché local del teléfono
+      try {
+        final cacheQuery = await _db
+            .collection('Visitas')
+            .where('condominioId', isEqualTo: _condominioId)
+            .where('code', isEqualTo: code)
+            .limit(1)
+            .get(const GetOptions(source: Source.cache));
 
-      final visitDoc = query.docs.first;
-      final visitData = visitDoc.data();
+        if (cacheQuery.docs.isNotEmpty) {
+          visitDoc = cacheQuery.docs.first;
+          visitData = visitDoc.data() as Map<String, dynamic>;
+          loadedFromCache = true;
+        }
+      } catch (_) {
+        // Si falla la lectura local o no está en caché, continuamos al servidor
+      }
 
-      final String residentUid = visitData['residentUid'];
+      // 2. SI NO ESTÁ EN CACHÉ: Buscamos en el Servidor (con un Timeout de 3 segs por si no hay red)
+      if (visitDoc == null) {
+        try {
+          final serverQuery = await _db
+              .collection('Visitas')
+              .where('condominioId', isEqualTo: _condominioId)
+              .where('code', isEqualTo: code)
+              .limit(1)
+              .get(const GetOptions(source: Source.serverAndCache))
+              .timeout(const Duration(seconds: 3));
+
+          if (serverQuery.docs.isNotEmpty) {
+            visitDoc = serverQuery.docs.first;
+            visitData = serverQuery.docs.first.data() as Map<String, dynamic>;
+          }
+        } catch (_) {
+          throw Exception(
+            'Sin conexión y el pase no se encuentra en el caché local.',
+          );
+        }
+      }
+
+      if (visitDoc == null || visitData == null) {
+        throw Exception('Pase no encontrado o inválido.');
+      }
+
+      // 3. VALIDACIONES LOCALES EN DART (Programada y No expirada)
+      final String status = visitData['status'] ?? '';
+      if (status != 'programada') {
+        throw Exception('El pase ya fue utilizado o no está activo.');
+      }
+
+      final Timestamp? scheduledAt = visitData['scheduledAt'];
+      if (scheduledAt != null &&
+          scheduledAt.toDate().isBefore(DateTime.now())) {
+        throw Exception('El pase ha expirado.');
+      }
+
+      // 4. ACTUALIZACIÓN LOCAL
+      // Firestore guarda este cambio en el teléfono AL INSTANTE.
+      // Cuando vuelva el internet, lo sincronizará a la nube en segundo plano silenciosamente.
+      visitDoc.reference.update({
+        'status': 'autorizada',
+        'checkedByGuardUid': uid,
+        'checkedAt': FieldValue.serverTimestamp(),
+      });
+
+      final String residentUid = visitData['residentUid'] ?? '';
       String residentName = 'Desconocido';
       String? residentTower;
       String? residentUnit;
@@ -450,25 +547,23 @@ class GuardState extends ChangeNotifier {
         (r) => r['uid'] == residentUid,
         orElse: () => {},
       );
+
       if (residentLocal.isNotEmpty) {
         residentName = residentLocal['nombre'];
         residentTower = residentLocal['torre']?.toString();
         residentUnit = residentLocal['numero']?.toString();
       }
 
-      await visitDoc.reference.update({
-        'status': 'autorizada',
-        'checkedByGuardUid': uid,
-        'checkedAt': FieldValue.serverTimestamp(),
-      });
-
       final vName = visitData['visitorName'] ?? '';
       final vLastName = visitData['visitorLastName'] ?? '';
       final vId = visitData['visitorId'] ?? '';
 
-      final description = 'Ingreso QR: $vName $vLastName $vId'.trim();
+      final description =
+          'Ingreso QR: $vName $vLastName $vId ${loadedFromCache ? "[OFFLINE]" : ""}'
+              .trim();
 
-      await _logEvent(
+      // Registro en bitácora local instantáneo
+      _logEvent(
         description: description,
         status: 'autorizada_qr',
         residentUid: residentUid,
@@ -477,13 +572,19 @@ class GuardState extends ChangeNotifier {
         residentUnit: residentUnit,
       );
 
-      return 'PASE AUTORIZADO:\n$vName $vLastName';
+      // Devuelve la respuesta a la pantalla INMEDIATAMENTE
+      return 'PASE AUTORIZADO ${loadedFromCache ? "(Offline)" : ""}:\n$vName $vLastName';
     } catch (e) {
-      await _logEvent(
-        description: 'QR rechazado: $code',
+      String errorMessage = e.toString().contains('Exception:')
+          ? e.toString().split('Exception: ')[1].trim()
+          : e.toString();
+
+      _logEvent(
+        description: 'QR rechazado: $code ($errorMessage)',
         status: 'rechazada_qr',
       );
-      throw Exception('Error al verificar: $e');
+
+      throw Exception(errorMessage);
     }
   }
 
