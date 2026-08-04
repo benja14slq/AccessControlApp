@@ -321,9 +321,22 @@ class GuardState extends ChangeNotifier {
   Future<Map<String, dynamic>> verifyPlateByLPR() async {
     if (_condominioId == null) throw Exception("Error de inicialización");
     String recognizedPlate = '';
+    bool isOffline = false; // Controlará si usamos el modo offline
 
     try {
-      // 1. CAPTURA Y PROCESAMIENTO (Edge Computing - 100% Local en el teléfono)
+      // 1. PING RÁPIDO: Comprobamos si hay internet real (Máximo 1.5 segundos)
+      try {
+        final socket = await Socket.connect(
+          '8.8.8.8',
+          53,
+          timeout: const Duration(milliseconds: 1500),
+        );
+        socket.destroy();
+      } catch (_) {
+        isOffline = true; // No hay internet, activamos el modo offline
+      }
+
+      // 2. CAPTURA Y PROCESAMIENTO (Edge Computing - Local)
       final ImagePicker picker = ImagePicker();
       final XFile? photo = await picker.pickImage(
         source: ImageSource.camera,
@@ -365,25 +378,19 @@ class GuardState extends ChangeNotifier {
       recognizedPlate = bestMatch;
 
       DocumentSnapshot? vehicleDoc;
-      bool loadedFromCache = false;
 
-      // 2. BÚSQUEDA INSTANTÁNEA EN CACHÉ LOCAL
-      try {
+      // 3. BÚSQUEDA INTELIGENTE
+      if (isOffline) {
+        // 🔥 MODO OFFLINE: Buscamos obligatoriamente en caché
         final cacheQuery = await _db
             .collectionGroup('Vehiculos')
             .where('condominioId', isEqualTo: _condominioId)
             .where('plate', isEqualTo: recognizedPlate)
             .limit(1)
             .get(const GetOptions(source: Source.cache));
-
-        if (cacheQuery.docs.isNotEmpty) {
-          vehicleDoc = cacheQuery.docs.first;
-          loadedFromCache = true;
-        }
-      } catch (_) {}
-
-      // 3. SI NO ESTÁ EN CACHÉ, BUSCAMOS EN EL SERVIDOR (Timeout corto)
-      if (vehicleDoc == null) {
+        if (cacheQuery.docs.isNotEmpty) vehicleDoc = cacheQuery.docs.first;
+      } else {
+        // 🌐 MODO ONLINE: Buscamos en el servidor. Si falla (red inestable), caemos al caché.
         try {
           final serverQuery = await _db
               .collectionGroup('Vehiculos')
@@ -392,19 +399,26 @@ class GuardState extends ChangeNotifier {
               .limit(1)
               .get(const GetOptions(source: Source.serverAndCache))
               .timeout(const Duration(seconds: 3));
-
-          if (serverQuery.docs.isNotEmpty) {
-            vehicleDoc = serverQuery.docs.first;
-          }
+          if (serverQuery.docs.isNotEmpty) vehicleDoc = serverQuery.docs.first;
         } catch (_) {
-          throw Exception(
-            'Sin conexión y la patente no se encuentra en el caché local.',
-          );
+          isOffline = true; // Falló el servidor, cambiamos a offline
+          final fallbackQuery = await _db
+              .collectionGroup('Vehiculos')
+              .where('condominioId', isEqualTo: _condominioId)
+              .where('plate', isEqualTo: recognizedPlate)
+              .limit(1)
+              .get(const GetOptions(source: Source.cache));
+          if (fallbackQuery.docs.isNotEmpty)
+            vehicleDoc = fallbackQuery.docs.first;
         }
       }
 
       if (vehicleDoc == null) {
-        throw Exception('PATENTE NO REGISTRADA: $recognizedPlate');
+        throw Exception(
+          isOffline
+              ? 'PATENTE NO ENCONTRADA EN CACHÉ. (Requiere red)'
+              : 'PATENTE NO REGISTRADA: $recognizedPlate',
+        );
       }
 
       final residentRef = vehicleDoc.reference.parent.parent;
@@ -413,12 +427,12 @@ class GuardState extends ChangeNotifier {
       DocumentSnapshot? residentDoc;
       try {
         residentDoc = await residentRef.get(
-          const GetOptions(source: Source.cache),
+          GetOptions(source: isOffline ? Source.cache : Source.serverAndCache),
         );
       } catch (_) {
-        residentDoc = await residentRef
-            .get(const GetOptions(source: Source.serverAndCache))
-            .timeout(const Duration(seconds: 3));
+        residentDoc = await residentRef.get(
+          const GetOptions(source: Source.cache),
+        );
       }
 
       if (!residentDoc.exists) throw Exception('Residente no encontrado.');
@@ -430,10 +444,11 @@ class GuardState extends ChangeNotifier {
           ? 'Torre ${residentData['torre']} - ${residentData['numero']}'
           : 'Nº ${residentData['numero']}';
 
-      // 4. REGISTRO EN BITÁCORA LOCAL INSTANTÁNEO
+      // 4. REGISTRO EN BITÁCORA
       _logEvent(
         description:
-            'Ingreso LPR: $residentName (Patente: $recognizedPlate) ${loadedFromCache ? "[OFFLINE]" : ""}',
+            'Ingreso LPR: $residentName (Patente: $recognizedPlate) ${isOffline ? "[OFFLINE]" : ""}'
+                .trim(),
         status: 'autorizada_lpr',
         residentUid: residentData['uid'],
         residentName: residentName,
@@ -444,20 +459,18 @@ class GuardState extends ChangeNotifier {
       return {
         'success': true,
         'message':
-            'ACCESO AUTORIZADO ${loadedFromCache ? "(Offline)" : ""}:\n$residentName\n$unit (Patente: $recognizedPlate)',
+            'ACCESO AUTORIZADO ${isOffline ? "(Offline)" : ""}:\n$residentName\n$unit (Patente: $recognizedPlate)',
       };
     } catch (e) {
       String errorMessage = e.toString().contains('Exception:')
           ? e.toString().split('Exception: ')[1].trim()
           : e.toString();
-
       if (!errorMessage.contains('Captura cancelada')) {
         _logEvent(
           description: 'Rechazo LPR: $errorMessage ($recognizedPlate)',
           status: 'rechazada_lpr',
         );
       }
-
       return {'success': false, 'message': errorMessage};
     }
   }
@@ -467,32 +480,39 @@ class GuardState extends ChangeNotifier {
   // ==========================================
   Future<String> verifyPass(String code) async {
     if (_condominioId == null) throw Exception("Error de inicialización");
+    bool isOffline = false;
 
     try {
+      // 1. PING RÁPIDO
+      try {
+        final socket = await Socket.connect(
+          '8.8.8.8',
+          53,
+          timeout: const Duration(milliseconds: 1500),
+        );
+        socket.destroy();
+      } catch (_) {
+        isOffline = true;
+      }
+
       DocumentSnapshot? visitDoc;
       Map<String, dynamic>? visitData;
-      bool loadedFromCache = false;
 
-      // 1. ESTRATEGIA INSTANTÁNEA: Intentamos buscar PRIMERO en el Caché local del teléfono
-      try {
+      // 2. BÚSQUEDA INTELIGENTE
+      if (isOffline) {
+        // 🔥 MODO OFFLINE
         final cacheQuery = await _db
             .collection('Visitas')
             .where('condominioId', isEqualTo: _condominioId)
             .where('code', isEqualTo: code)
             .limit(1)
             .get(const GetOptions(source: Source.cache));
-
         if (cacheQuery.docs.isNotEmpty) {
           visitDoc = cacheQuery.docs.first;
           visitData = visitDoc.data() as Map<String, dynamic>;
-          loadedFromCache = true;
         }
-      } catch (_) {
-        // Si falla la lectura local o no está en caché, continuamos al servidor
-      }
-
-      // 2. SI NO ESTÁ EN CACHÉ: Buscamos en el Servidor (con un Timeout de 3 segs por si no hay red)
-      if (visitDoc == null) {
+      } else {
+        // 🌐 MODO ONLINE (Si el internet se cae a la mitad, usa el caché como rescate)
         try {
           final serverQuery = await _db
               .collection('Visitas')
@@ -501,26 +521,37 @@ class GuardState extends ChangeNotifier {
               .limit(1)
               .get(const GetOptions(source: Source.serverAndCache))
               .timeout(const Duration(seconds: 3));
-
           if (serverQuery.docs.isNotEmpty) {
             visitDoc = serverQuery.docs.first;
             visitData = serverQuery.docs.first.data() as Map<String, dynamic>;
           }
         } catch (_) {
-          throw Exception(
-            'Sin conexión y el pase no se encuentra en el caché local.',
-          );
+          isOffline = true;
+          final fallbackQuery = await _db
+              .collection('Visitas')
+              .where('condominioId', isEqualTo: _condominioId)
+              .where('code', isEqualTo: code)
+              .limit(1)
+              .get(const GetOptions(source: Source.cache));
+          if (fallbackQuery.docs.isNotEmpty) {
+            visitDoc = fallbackQuery.docs.first;
+            visitData = fallbackQuery.docs.first.data() as Map<String, dynamic>;
+          }
         }
       }
 
       if (visitDoc == null || visitData == null) {
-        throw Exception('Pase no encontrado o inválido.');
+        throw Exception(
+          isOffline
+              ? 'Pase no encontrado en caché local.'
+              : 'Pase no encontrado o inválido.',
+        );
       }
 
-      // 3. VALIDACIONES LOCALES EN DART (Programada y No expirada)
+      // 3. VALIDACIONES LOCALES
       final String status = visitData['status'] ?? '';
       if (status != 'programada') {
-        throw Exception('El pase ya fue utilizado o no está activo.');
+        throw Exception('El pase ya fue utilizado o cancelado.');
       }
 
       final Timestamp? scheduledAt = visitData['scheduledAt'];
@@ -529,9 +560,7 @@ class GuardState extends ChangeNotifier {
         throw Exception('El pase ha expirado.');
       }
 
-      // 4. ACTUALIZACIÓN LOCAL
-      // Firestore guarda este cambio en el teléfono AL INSTANTE.
-      // Cuando vuelva el internet, lo sincronizará a la nube en segundo plano silenciosamente.
+      // 4. ACTUALIZACIÓN LOCAL (Sincroniza en la nube luego)
       visitDoc.reference.update({
         'status': 'autorizada',
         'checkedByGuardUid': uid,
@@ -547,7 +576,6 @@ class GuardState extends ChangeNotifier {
         (r) => r['uid'] == residentUid,
         orElse: () => {},
       );
-
       if (residentLocal.isNotEmpty) {
         residentName = residentLocal['nombre'];
         residentTower = residentLocal['torre']?.toString();
@@ -559,10 +587,9 @@ class GuardState extends ChangeNotifier {
       final vId = visitData['visitorId'] ?? '';
 
       final description =
-          'Ingreso QR: $vName $vLastName $vId ${loadedFromCache ? "[OFFLINE]" : ""}'
+          'Ingreso QR: $vName $vLastName $vId ${isOffline ? "[OFFLINE]" : ""}'
               .trim();
 
-      // Registro en bitácora local instantáneo
       _logEvent(
         description: description,
         status: 'autorizada_qr',
@@ -572,18 +599,15 @@ class GuardState extends ChangeNotifier {
         residentUnit: residentUnit,
       );
 
-      // Devuelve la respuesta a la pantalla INMEDIATAMENTE
-      return 'PASE AUTORIZADO ${loadedFromCache ? "(Offline)" : ""}:\n$vName $vLastName';
+      return 'PASE AUTORIZADO ${isOffline ? "(Offline)" : ""}:\n$vName $vLastName';
     } catch (e) {
       String errorMessage = e.toString().contains('Exception:')
           ? e.toString().split('Exception: ')[1].trim()
           : e.toString();
-
       _logEvent(
         description: 'QR rechazado: $code ($errorMessage)',
         status: 'rechazada_qr',
       );
-
       throw Exception(errorMessage);
     }
   }
